@@ -59,8 +59,8 @@ export default function AuthPage() {
     },
   });
 
-  const defaultTab = new URLSearchParams(search).get("action") === "register" 
-    ? "register" 
+  const defaultTab = new URLSearchParams(search).get("action") === "register"
+    ? "register"
     : "login";
 
   return (
