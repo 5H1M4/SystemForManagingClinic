@@ -11,6 +11,7 @@ import SuperAdminDashboard from "@/pages/superadmin/dashboard";
 import ClinicDashboard from "@/pages/clinic/dashboard";
 import DoctorDashboard from "@/pages/doctor/dashboard";
 import ClientDashboard from "@/pages/client/dashboard";
+import NewAppointment from "@/pages/appointments/new";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -23,6 +24,7 @@ function Router() {
       <ProtectedRoute path="/clinic/dashboard" component={ClinicDashboard} />
       <ProtectedRoute path="/doctor/dashboard" component={DoctorDashboard} />
       <ProtectedRoute path="/client/dashboard" component={ClientDashboard} />
+      <ProtectedRoute path="/appointments/new" component={NewAppointment} />
       <Route component={NotFound} />
     </Switch>
   );

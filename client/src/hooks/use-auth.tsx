@@ -56,8 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/register", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: () => {
+      toast({
+        title: "Registration successful",
+        description: "You can now log in with your credentials",
+      });
     },
     onError: (error: Error) => {
       toast({
