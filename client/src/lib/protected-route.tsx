@@ -29,5 +29,22 @@ export function ProtectedRoute({
     );
   }
 
-  return <Component />
+  // Role-based routing
+  const roleBasedPath = {
+    SUPER_ADMIN: "/superadmin/dashboard",
+    CLINIC_ADMIN: "/clinic/dashboard",
+    DOCTOR: "/doctor/dashboard",
+    CLIENT: "/dashboard",
+  }[user.role];
+
+  // Redirect if trying to access wrong role's dashboard
+  if (!path.startsWith(roleBasedPath)) {
+    return (
+      <Route path={path}>
+        <Redirect to={roleBasedPath} />
+      </Route>
+    );
+  }
+
+  return <Component />;
 }

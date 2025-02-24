@@ -7,7 +7,9 @@ import { ProtectedRoute } from "./lib/protected-route";
 import LandingPage from "@/pages/landing-page";
 import AuthPage from "@/pages/auth-page";
 import StaffAuth from "@/pages/staff-auth";
-import Dashboard from "@/pages/dashboard";
+import SuperAdminDashboard from "@/pages/superadmin/dashboard";
+import ClinicDashboard from "@/pages/clinic/dashboard";
+import DoctorDashboard from "@/pages/doctor/dashboard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,7 +18,9 @@ function Router() {
       <Route path="/" component={LandingPage} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/auth/staff" component={StaffAuth} />
-      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <ProtectedRoute path="/superadmin/dashboard" component={SuperAdminDashboard} />
+      <ProtectedRoute path="/clinic/dashboard" component={ClinicDashboard} />
+      <ProtectedRoute path="/doctor/dashboard" component={DoctorDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
