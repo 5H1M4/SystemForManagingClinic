@@ -1,9 +1,9 @@
 import { useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { insertUserSchema } from "@shared/schema";
+import { insertUserSchema, UserRole } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,6 +13,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Form,
   FormControl,
@@ -25,10 +32,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
+  const [search] = useSearch();
   const { user, loginMutation, registerMutation } = useAuth();
 
   useEffect(() => {
-    if (user) setLocation("/");
+    if (user) setLocation("/dashboard");
   }, [user, setLocation]);
 
   const loginForm = useForm({
@@ -51,24 +59,28 @@ export default function AuthPage() {
     },
   });
 
+  const defaultTab = new URLSearchParams(search).get("action") === "register" 
+    ? "register" 
+    : "login";
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="max-w-6xl w-full grid lg:grid-cols-2 gap-8">
         <div className="flex flex-col justify-center">
-          <Card>
+          <Card className="bg-card/50 backdrop-blur">
             <CardHeader>
-              <CardTitle>Welcome to ClinicFlow</CardTitle>
+              <CardTitle className="text-2xl">Welcome to ClinicFlow</CardTitle>
               <CardDescription>
                 Manage your clinic appointments efficiently
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="login">
+              <Tabs defaultValue={defaultTab}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="login">Login</TabsTrigger>
                   <TabsTrigger value="register">Register</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="login">
                   <Form {...loginForm}>
                     <form
@@ -105,7 +117,7 @@ export default function AuthPage() {
                       />
                       <Button
                         type="submit"
-                        className="w-full"
+                        className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                         disabled={loginMutation.isPending}
                       >
                         Login
@@ -124,30 +136,30 @@ export default function AuthPage() {
                     >
                       <FormField
                         control={registerForm.control}
-                        name="username"
+                        name="role"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Username</FormLabel>
-                            <FormControl>
-                              <Input {...field} />
-                            </FormControl>
+                            <FormLabel>I am a</FormLabel>
+                            <Select
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select your role" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value={UserRole.CLIENT}>Patient</SelectItem>
+                                <SelectItem value={UserRole.DOCTOR}>Doctor</SelectItem>
+                                <SelectItem value={UserRole.CLINIC_ADMIN}>Clinic Administrator</SelectItem>
+                              </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      <FormField
-                        control={registerForm.control}
-                        name="password"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Password</FormLabel>
-                            <FormControl>
-                              <Input type="password" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={registerForm.control}
@@ -176,6 +188,35 @@ export default function AuthPage() {
                           )}
                         />
                       </div>
+
+                      <FormField
+                        control={registerForm.control}
+                        name="username"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Username</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={registerForm.control}
+                        name="password"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
                       <FormField
                         control={registerForm.control}
                         name="email"
@@ -189,6 +230,7 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+
                       <FormField
                         control={registerForm.control}
                         name="phone"
@@ -202,9 +244,10 @@ export default function AuthPage() {
                           </FormItem>
                         )}
                       />
+
                       <Button
                         type="submit"
-                        className="w-full"
+                        className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
                         disabled={registerMutation.isPending}
                       >
                         Register
@@ -219,24 +262,23 @@ export default function AuthPage() {
 
         <div className="hidden lg:flex flex-col justify-center">
           <div className="space-y-4">
-            <h1 className="text-4xl font-bold">
-              Transform Your Clinic Management
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              Transform Your Healthcare Experience
             </h1>
             <p className="text-muted-foreground">
-              Streamline appointments, manage services, and track payments all in
-              one place. Join thousands of clinics already using our platform.
+              Join our platform to streamline appointments, connect with healthcare professionals, and manage your medical journey efficiently.
             </p>
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 border rounded-lg">
-                <h3 className="font-semibold">Easy Scheduling</h3>
+              <div className="p-4 border rounded-lg bg-card/50 backdrop-blur">
+                <h3 className="font-semibold text-primary">For Patients</h3>
                 <p className="text-sm text-muted-foreground">
-                  Book and manage appointments with a few clicks
+                  Easy appointment booking and medical history tracking
                 </p>
               </div>
-              <div className="p-4 border rounded-lg">
-                <h3 className="font-semibold">Payment Tracking</h3>
+              <div className="p-4 border rounded-lg bg-card/50 backdrop-blur">
+                <h3 className="font-semibold text-primary">For Doctors</h3>
                 <p className="text-sm text-muted-foreground">
-                  Simple and secure payment processing
+                  Efficient patient management and scheduling
                 </p>
               </div>
             </div>
