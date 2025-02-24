@@ -105,12 +105,28 @@ export default function LandingPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-4">
-                  <div className="h-32 bg-muted rounded-lg"></div>
-                  <div className="h-64 bg-muted rounded-lg"></div>
+                  <img 
+                    src="https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80"
+                    alt="Modern Clinic Reception"
+                    className="h-32 w-full object-cover rounded-lg"
+                  />
+                  <img 
+                    src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80"
+                    alt="Treatment Room"
+                    className="h-64 w-full object-cover rounded-lg"
+                  />
                 </div>
                 <div className="space-y-4 pt-8">
-                  <div className="h-64 bg-muted rounded-lg"></div>
-                  <div className="h-32 bg-muted rounded-lg"></div>
+                  <img 
+                    src="https://images.unsplash.com/photo-1631217868264-e5b90bb4fbd3?auto=format&fit=crop&q=80"
+                    alt="Medical Equipment"
+                    className="h-64 w-full object-cover rounded-lg"
+                  />
+                  <img 
+                    src="https://images.unsplash.com/photo-1666214280557-f1b5022eb634?auto=format&fit=crop&q=80"
+                    alt="Consultation Room"
+                    className="h-32 w-full object-cover rounded-lg"
+                  />
                 </div>
               </div>
             </div>

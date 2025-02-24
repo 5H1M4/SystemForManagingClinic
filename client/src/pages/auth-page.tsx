@@ -134,32 +134,6 @@ export default function AuthPage() {
                       )}
                       className="space-y-4"
                     >
-                      <FormField
-                        control={registerForm.control}
-                        name="role"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>I am a</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select your role" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value={UserRole.CLIENT}>Patient</SelectItem>
-                                <SelectItem value={UserRole.DOCTOR}>Doctor</SelectItem>
-                                <SelectItem value={UserRole.CLINIC_ADMIN}>Clinic Administrator</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
                       <div className="grid grid-cols-2 gap-4">
                         <FormField
                           control={registerForm.control}
