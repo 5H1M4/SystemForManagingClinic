@@ -18,16 +18,19 @@ export default function ClinicDashboard() {
   const { user } = useAuth();
   const clinicId = user?.clinicId;
 
-  const { data: appointments, isLoading: loadingAppointments } = useQuery({
+  const { data: appointments = [], isLoading: loadingAppointments } = useQuery({
     queryKey: [`/api/clinics/${clinicId}/appointments`],
+    enabled: !!clinicId,
   });
 
-  const { data: doctors, isLoading: loadingDoctors } = useQuery({
+  const { data: doctors = [], isLoading: loadingDoctors } = useQuery({
     queryKey: [`/api/clinics/${clinicId}/doctors`],
+    enabled: !!clinicId,
   });
 
-  const { data: payments, isLoading: loadingPayments } = useQuery({
+  const { data: payments = [], isLoading: loadingPayments } = useQuery({
     queryKey: [`/api/clinics/${clinicId}/payments`],
+    enabled: !!clinicId,
   });
 
   if (loadingAppointments || loadingDoctors || loadingPayments) {
@@ -38,7 +41,7 @@ export default function ClinicDashboard() {
     );
   }
 
-  const totalRevenue = payments?.reduce(
+  const totalRevenue = payments.reduce(
     (sum: number, payment: any) => sum + Number(payment.amount),
     0
   );
@@ -68,7 +71,7 @@ export default function ClinicDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{doctors?.length || 0}</div>
+            <div className="text-2xl font-bold">{doctors.length}</div>
           </CardContent>
         </Card>
 
@@ -81,10 +84,10 @@ export default function ClinicDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {appointments?.filter((apt: any) => {
+              {appointments.filter((apt: any) => {
                 const today = new Date().toISOString().split("T")[0];
                 return apt.startTime.startsWith(today);
-              }).length || 0}
+              }).length}
             </div>
           </CardContent>
         </Card>

@@ -8,8 +8,9 @@ import { format } from "date-fns";
 export default function DoctorDashboard() {
   const { user } = useAuth();
 
-  const { data: appointments, isLoading } = useQuery({
+  const { data: appointments = [], isLoading } = useQuery({
     queryKey: [`/api/doctors/${user?.id}/appointments`],
+    enabled: !!user?.id, // Only fetch if user ID exists
   });
 
   if (isLoading) {
@@ -20,12 +21,12 @@ export default function DoctorDashboard() {
     );
   }
 
-  const todayAppointments = appointments?.filter((apt: any) => {
+  const todayAppointments = appointments.filter((apt: any) => {
     const today = new Date().toISOString().split("T")[0];
     return apt.startTime.startsWith(today);
   });
 
-  const completedAppointments = appointments?.filter(
+  const completedAppointments = appointments.filter(
     (apt: any) => apt.status === "COMPLETED"
   );
 
@@ -46,7 +47,7 @@ export default function DoctorDashboard() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{todayAppointments?.length || 0}</div>
+            <div className="text-2xl font-bold">{todayAppointments.length}</div>
           </CardContent>
         </Card>
 
@@ -57,7 +58,7 @@ export default function DoctorDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {todayAppointments?.[0]
+              {todayAppointments[0]
                 ? format(new Date(todayAppointments[0].startTime), "h:mm a")
                 : "No appointments"}
             </div>
@@ -73,7 +74,7 @@ export default function DoctorDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {completedAppointments?.length || 0}
+              {completedAppointments.length}
             </div>
           </CardContent>
         </Card>
@@ -95,7 +96,7 @@ export default function DoctorDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {todayAppointments?.length ? (
+              {todayAppointments.length > 0 ? (
                 todayAppointments.map((appointment: any) => (
                   <div
                     key={appointment.id}

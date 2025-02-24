@@ -34,7 +34,7 @@ export function ProtectedRoute({
     SUPER_ADMIN: "/superadmin/dashboard",
     CLINIC_ADMIN: "/clinic/dashboard",
     DOCTOR: "/doctor/dashboard",
-    CLIENT: "/dashboard",
+    CLIENT: "/client/dashboard",
   }[user.role];
 
   // Redirect if trying to access wrong role's dashboard
