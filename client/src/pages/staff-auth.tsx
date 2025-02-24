@@ -36,7 +36,12 @@ export default function StaffAuth() {
       if (user.role === "CLIENT") {
         setLocation("/");
       } else {
-        setLocation("/dashboard");
+        const roleBasedPath = {
+          SUPER_ADMIN: "/superadmin/dashboard",
+          CLINIC_ADMIN: "/clinic/dashboard",
+          DOCTOR: "/doctor/dashboard",
+        }[user.role];
+        setLocation(roleBasedPath);
       }
     }
   }, [user, setLocation]);
