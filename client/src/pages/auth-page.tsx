@@ -14,13 +14,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Form,
   FormControl,
   FormField,
@@ -29,14 +22,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
   const [search] = useSearch();
   const { user, loginMutation, registerMutation } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (user) setLocation("/dashboard");
+    if (user) {
+      setLocation("/client/dashboard");
+    }
   }, [user, setLocation]);
 
   const loginForm = useForm({
@@ -55,13 +52,21 @@ export default function AuthPage() {
       lastName: "",
       email: "",
       phone: "",
-      role: "CLIENT" as const,
+      role: UserRole.CLIENT,
     },
   });
 
   const defaultTab = new URLSearchParams(search).get("action") === "register"
     ? "register"
     : "login";
+
+  const handleRegisterSuccess = () => {
+    toast({
+      title: "Registration Successful",
+      description: "Please log in with your new account",
+      variant: "default",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -130,7 +135,9 @@ export default function AuthPage() {
                   <Form {...registerForm}>
                     <form
                       onSubmit={registerForm.handleSubmit((data) =>
-                        registerMutation.mutate(data)
+                        registerMutation.mutate(data, {
+                          onSuccess: handleRegisterSuccess,
+                        })
                       )}
                       className="space-y-4"
                     >
@@ -250,9 +257,9 @@ export default function AuthPage() {
                 </p>
               </div>
               <div className="p-4 border rounded-lg bg-card/50 backdrop-blur">
-                <h3 className="font-semibold text-primary">For Doctors</h3>
+                <h3 className="font-semibold text-primary">Our Services</h3>
                 <p className="text-sm text-muted-foreground">
-                  Efficient patient management and scheduling
+                  Professional healthcare services tailored to your needs
                 </p>
               </div>
             </div>

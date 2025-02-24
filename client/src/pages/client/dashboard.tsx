@@ -38,7 +38,7 @@ export default function ClientDashboard() {
         </h2>
         <Link href="/appointments/new">
           <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
-            <PlusCircle className="mr-2 h-4 w-4" /> Book Appointment
+            <PlusCircle className="mr-2 h-4 w-4" /> Book Appointment 
           </Button>
         </Link>
       </div>
