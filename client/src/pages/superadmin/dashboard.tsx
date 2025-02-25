@@ -35,7 +35,7 @@ export default function SuperAdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{clinics?.length || 0}</div>
+            <div className="text-2xl font-bold">{Array.isArray(clinics) ? clinics.length : 0}</div>
           </CardContent>
         </Card>
 
@@ -66,7 +66,7 @@ export default function SuperAdminDashboard() {
             <CardTitle>Managed Clinics</CardTitle>
           </CardHeader>
           <CardContent>
-            {clinics?.length ? (
+            {Array.isArray(clinics) && clinics.length ? (
               <div className="divide-y divide-border rounded-md border">
                 {clinics.map((clinic: any) => (
                   <div
