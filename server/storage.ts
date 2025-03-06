@@ -1,4 +1,4 @@
-import { IStorage } from "./storage";
+// storage.ts
 import createMemoryStore from "memorystore";
 import session from "express-session";
 import {
@@ -13,119 +13,474 @@ import {
   InsertAppointment,
   InsertPayment
 } from "@shared/schema";
+import { pool } from "./db"; // Use the same pool instance for DB queries
 
 const MemoryStore = createMemoryStore(session);
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private clinics: Map<number, Clinic>;
-  private services: Map<number, Service>;
-  private appointments: Map<number, Appointment>;
-  private payments: Map<number, Payment>;
-  private currentIds: { [key: string]: number };
-  sessionStore: session.SessionStore;
+// Define the storage interface
+export interface IStorage {
+  // User operations
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(insertUser: InsertUser): Promise<User>;
+  
+  // Clinic operations
+  getClinic(id: number): Promise<Clinic | undefined>;
+  createClinic(insertClinic: InsertClinic): Promise<Clinic>;
+  updateClinic(clinicId: number, updateData: Partial<Clinic>): Promise<Clinic | null>;
+  deleteClinic(clinicId: number): Promise<boolean>;
+  listClinics(): Promise<Clinic[]>;
+  
+  // Service operations
+  createService(insertService: InsertService): Promise<Service>;
+  listServicesByClinic(clinicId: number): Promise<Service[]>;
+  
+  // Appointment operations
+  createAppointment(insertAppointment: InsertAppointment): Promise<Appointment>;
+  listAppointmentsByClinic(clinicId: number): Promise<Appointment[]>;
+  listAppointmentsByDoctor(doctorId: number): Promise<Appointment[]>;
+  
+  // Payment operations
+  createPayment(insertPayment: InsertPayment): Promise<Payment>;
+  listPaymentsByClinic(clinicId: number): Promise<Payment[]>;
+  
+  // Admin operations
+  createClinicAdmin(clinicId: number, adminData: InsertUser): Promise<User>;
+  
+  // Session store
+  sessionStore: session.Store;
+}
+
+export class PostgresStorage implements IStorage {
+  sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.clinics = new Map();
-    this.services = new Map();
-    this.appointments = new Map();
-    this.payments = new Map();
-    this.currentIds = {
-      users: 1,
-      clinics: 1,
-      services: 1,
-      appointments: 1,
-      payments: 1
-    };
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000 // 24h
     });
   }
 
-  // User operations
+  // ============
+  // User Methods
+  // ============
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    try {
+      const { rows } = await pool.query("SELECT * FROM users WHERE id = $1", [id]);
+      if (rows.length === 0) return undefined;
+      return this.convertUser(rows[0]);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      throw new Error("Failed to fetch user");
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username
-    );
+    try {
+      const { rows } = await pool.query("SELECT * FROM users WHERE username = $1", [username]);
+      if (rows.length === 0) return undefined;
+      return this.convertUser(rows[0]);
+    } catch (error) {
+      console.error("Error fetching user by username:", error);
+      throw new Error("Failed to fetch user by username");
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentIds.users++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO users 
+           (username, password, first_name, last_name, email, phone, role, clinic_id)
+         VALUES 
+           ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [
+          insertUser.username,
+          insertUser.password,
+          insertUser.firstName,
+          insertUser.lastName,
+          insertUser.email,
+          insertUser.phone,
+          insertUser.role,
+          insertUser.clinicId,
+        ]
+      );
+      return this.convertUser(rows[0]);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      throw new Error("Failed to create user");
+    }
   }
 
-  // Clinic operations
+  // Helper function to convert a DB row (with snake_case fields) to the expected User shape.
+  private convertUser(row: any): User {
+    return {
+      id: row.id,
+      username: row.username,
+      password: row.password,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      phone: row.phone,
+      role: row.role,
+      clinicId: row.clinic_id,
+    };
+  }
+
+  // =================
+  // Clinic Operations
+  // =================
   async getClinic(id: number): Promise<Clinic | undefined> {
-    return this.clinics.get(id);
+    try {
+      const { rows } = await pool.query("SELECT * FROM clinics WHERE id = $1", [id]);
+      if (rows.length === 0) return undefined;
+      return this.convertClinic(rows[0]);
+    } catch (error) {
+      console.error("Error fetching clinic:", error);
+      throw new Error("Failed to fetch clinic");
+    }
   }
 
   async createClinic(insertClinic: InsertClinic): Promise<Clinic> {
-    const id = this.currentIds.clinics++;
-    const clinic: Clinic = { ...insertClinic, id };
-    this.clinics.set(id, clinic);
-    return clinic;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO clinics 
+           (name, address, phone, email)
+         VALUES 
+           ($1, $2, $3, $4)
+         RETURNING *`,
+        [
+          insertClinic.name,
+          insertClinic.address,
+          insertClinic.phone,
+          insertClinic.email,
+        ]
+      );
+      return this.convertClinic(rows[0]);
+    } catch (error) {
+      console.error("Error creating clinic:", error);
+      throw new Error("Failed to create clinic");
+    }
+  }
+
+  async updateClinic(clinicId: number, updateData: Partial<Clinic>): Promise<Clinic | null> {
+    try {
+      const { rows } = await pool.query(
+        `UPDATE clinics 
+         SET name = $1, address = $2, phone = $3, email = $4 
+         WHERE id = $5 
+         RETURNING *`,
+        [updateData.name, updateData.address, updateData.phone, updateData.email, clinicId]
+      );
+      
+      if (rows.length === 0) return null;
+      return this.convertClinic(rows[0]);
+    } catch (error) {
+      console.error("Error updating clinic:", error);
+      throw new Error("Failed to update clinic");
+    }
+  }
+
+  async deleteClinic(clinicId: number): Promise<boolean> {
+    try {
+      // First check if clinic has associated services
+      const { rows: serviceRows } = await pool.query(
+        "SELECT COUNT(*) FROM services WHERE clinic_id = $1",
+        [clinicId]
+      );
+      
+      if (parseInt(serviceRows[0].count) > 0) {
+        // Option 1: Prevent deletion with clear message
+        throw new Error("Cannot delete clinic with associated services. Please delete services first.");
+        
+        // Option 2: Cascade delete (uncomment to use this approach instead)
+        // await pool.query("DELETE FROM services WHERE clinic_id = $1", [clinicId]);
+      }
+      
+      // Check for associated appointments
+      const { rows: appointmentRows } = await pool.query(
+        "SELECT COUNT(*) FROM appointments WHERE clinic_id = $1",
+        [clinicId]
+      );
+      
+      if (parseInt(appointmentRows[0].count) > 0) {
+        throw new Error("Cannot delete clinic with associated appointments. Please delete appointments first.");
+        // Or cascade delete if preferred
+      }
+      
+      // Check for associated users (doctors, admins)
+      const { rows: userRows } = await pool.query(
+        "SELECT COUNT(*) FROM users WHERE clinic_id = $1",
+        [clinicId]
+      );
+      
+      if (parseInt(userRows[0].count) > 0) {
+        throw new Error("Cannot delete clinic with associated users. Please reassign or delete users first.");
+        // Or cascade delete if preferred
+      }
+      
+      // Now safe to delete the clinic
+      const result = await pool.query("DELETE FROM clinics WHERE id = $1", [clinicId]);
+      if (result.rowCount === null) {
+        throw new Error("Failed to delete clinic");
+      }
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error("Database error during clinic deletion:", error);
+      throw error; // Rethrow to handle in the route
+    }
   }
 
   async listClinics(): Promise<Clinic[]> {
-    return Array.from(this.clinics.values());
+    try {
+      const { rows } = await pool.query("SELECT * FROM clinics ORDER BY id");
+      return rows.map(row => this.convertClinic(row));
+    } catch (error) {
+      console.error("Error listing clinics:", error);
+      throw new Error("Failed to list clinics");
+    }
   }
 
-  // Service operations
+  // Helper function to convert a DB row to the expected Clinic shape
+  private convertClinic(row: any): Clinic {
+    return {
+      id: row.id,
+      name: row.name,
+      address: row.address,
+      phone: row.phone,
+      email: row.email,
+    };
+  }
+
+  // ==================
+  // Service Operations
+  // ==================
   async createService(insertService: InsertService): Promise<Service> {
-    const id = this.currentIds.services++;
-    const service: Service = { ...insertService, id };
-    this.services.set(id, service);
-    return service;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO services 
+           (name, description, price, duration, clinic_id)
+         VALUES 
+           ($1, $2, $3, $4, $5)
+         RETURNING *`,
+        [
+          insertService.name,
+          insertService.description,
+          insertService.price,
+          insertService.duration,
+          insertService.clinicId,
+        ]
+      );
+      return this.convertService(rows[0]);
+    } catch (error) {
+      console.error("Error creating service:", error);
+      throw new Error("Failed to create service");
+    }
   }
 
   async listServicesByClinic(clinicId: number): Promise<Service[]> {
-    return Array.from(this.services.values()).filter(
-      (service) => service.clinicId === clinicId
-    );
+    try {
+      const { rows } = await pool.query(
+        "SELECT * FROM services WHERE clinic_id = $1 ORDER BY id",
+        [clinicId]
+      );
+      return rows.map(row => this.convertService(row));
+    } catch (error) {
+      console.error("Error listing services by clinic:", error);
+      throw new Error("Failed to list services by clinic");
+    }
   }
 
-  // Appointment operations
+  // Helper function to convert a DB row to the expected Service shape
+  private convertService(row: any): Service {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      price: row.price,
+      duration: row.duration,
+      clinicId: row.clinic_id,
+    };
+  }
+
+  // ======================
+  // Appointment Operations
+  // ======================
   async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
-    const id = this.currentIds.appointments++;
-    const appointment: Appointment = { ...insertAppointment, id };
-    this.appointments.set(id, appointment);
-    return appointment;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO appointments 
+           (client_id, doctor_id, service_id, start_time, end_time, status, clinic_id)
+         VALUES 
+           ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+          insertAppointment.clientId,
+          insertAppointment.doctorId,
+          insertAppointment.serviceId,
+          insertAppointment.startTime,
+          insertAppointment.endTime,
+          insertAppointment.status,
+          insertAppointment.clinicId,
+        ]
+      );
+      return this.convertAppointment(rows[0]);
+    } catch (error) {
+      console.error("Error creating appointment:", error);
+      throw new Error("Failed to create appointment");
+    }
   }
 
   async listAppointmentsByClinic(clinicId: number): Promise<Appointment[]> {
-    return Array.from(this.appointments.values()).filter(
-      (appointment) => appointment.clinicId === clinicId
-    );
+    try {
+      const { rows } = await pool.query(
+        "SELECT * FROM appointments WHERE clinic_id = $1 ORDER BY start_time",
+        [clinicId]
+      );
+      return rows.map(row => this.convertAppointment(row));
+    } catch (error) {
+      console.error("Error listing appointments by clinic:", error);
+      throw new Error("Failed to list appointments by clinic");
+    }
   }
 
   async listAppointmentsByDoctor(doctorId: number): Promise<Appointment[]> {
-    return Array.from(this.appointments.values()).filter(
-      (appointment) => appointment.doctorId === doctorId
-    );
+    try {
+      const { rows } = await pool.query(
+        "SELECT * FROM appointments WHERE doctor_id = $1 ORDER BY start_time",
+        [doctorId]
+      );
+      return rows.map(row => this.convertAppointment(row));
+    } catch (error) {
+      console.error("Error listing appointments by doctor:", error);
+      throw new Error("Failed to list appointments by doctor");
+    }
   }
 
-  // Payment operations
+  // Helper function to convert a DB row to the expected Appointment shape
+  private convertAppointment(row: any): Appointment {
+    return {
+      id: row.id,
+      clientId: row.client_id,
+      doctorId: row.doctor_id,
+      serviceId: row.service_id,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      status: row.status,
+      clinicId: row.clinic_id,
+    };
+  }
+
+  // ===================
+  // Payment Operations
+  // ===================
   async createPayment(insertPayment: InsertPayment): Promise<Payment> {
-    const id = this.currentIds.payments++;
-    const payment: Payment = { ...insertPayment, id };
-    this.payments.set(id, payment);
-    return payment;
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO payments 
+           (appointment_id, amount, status, paid_at)
+         VALUES 
+           ($1, $2, $3, $4)
+         RETURNING *`,
+        [
+          insertPayment.appointmentId,
+          insertPayment.amount,
+          insertPayment.status,
+          insertPayment.paidAt,
+        ]
+      );
+      return this.convertPayment(rows[0]);
+    } catch (error) {
+      console.error("Error creating payment:", error);
+      throw new Error("Failed to create payment");
+    }
   }
 
   async listPaymentsByClinic(clinicId: number): Promise<Payment[]> {
-    const clinicAppointments = await this.listAppointmentsByClinic(clinicId);
-    const appointmentIds = new Set(clinicAppointments.map(a => a.id));
-    return Array.from(this.payments.values()).filter(
-      (payment) => appointmentIds.has(payment.appointmentId)
-    );
+    try {
+      const { rows } = await pool.query(
+        `SELECT p.* 
+         FROM payments p
+         JOIN appointments a ON p.appointment_id = a.id
+         WHERE a.clinic_id = $1
+         ORDER BY p.id`,
+        [clinicId]
+      );
+      return rows.map(row => this.convertPayment(row));
+    } catch (error) {
+      console.error("Error listing payments by clinic:", error);
+      throw new Error("Failed to list payments by clinic");
+    }
+  }
+
+  // Helper function to convert a DB row to the expected Payment shape
+  private convertPayment(row: any): Payment {
+    return {
+      id: row.id,
+      appointmentId: row.appointment_id,
+      amount: row.amount,
+      status: row.status,
+      paidAt: row.paid_at,
+    };
+  }
+
+  // ======================
+  // Admin Operations
+  // ======================
+  async createClinicAdmin(clinicId: number, adminData: InsertUser): Promise<User> {
+    try {
+      // Start a transaction
+      await pool.query('BEGIN');
+      
+      // Create the user with CLINIC_ADMIN role
+      const adminWithRole = { ...adminData, role: "CLINIC_ADMIN", clinicId };
+      const user = await this.createUser(adminWithRole);
+      
+      // Update the clinic to associate with this admin if needed
+      // This is optional depending on your data model
+      await pool.query(
+        "UPDATE clinics SET admin_id = $1 WHERE id = $2",
+        [user.id, clinicId]
+      );
+      
+      // Commit the transaction
+      await pool.query('COMMIT');
+      
+      return user;
+    } catch (error) {
+      // Rollback in case of error
+      await pool.query('ROLLBACK');
+      console.error("Error creating clinic admin:", error);
+      throw new Error("Failed to create clinic admin");
+    }
+  }
+  
+  // Additional methods for clinic admin management
+  async listClinicAdmins(clinicId: number): Promise<User[]> {
+    try {
+      const { rows } = await pool.query(
+        "SELECT * FROM users WHERE role = 'CLINIC_ADMIN' AND clinic_id = $1",
+        [clinicId]
+      );
+      return rows.map(row => this.convertUser(row));
+    } catch (error) {
+      console.error("Error listing clinic admins:", error);
+      throw new Error("Failed to list clinic admins");
+    }
+  }
+  
+  async deleteClinicAdmin(adminId: number): Promise<boolean> {
+    try {
+      const result = await pool.query(
+        "DELETE FROM users WHERE id = $1 AND role = 'CLINIC_ADMIN'",
+        [adminId]
+      );
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error("Error deleting clinic admin:", error);
+      throw new Error("Failed to delete clinic admin");
+    }
   }
 }
 
-export const storage = new MemStorage();
+// Export a singleton instance of the PostgresStorage
+export const storage = new PostgresStorage();

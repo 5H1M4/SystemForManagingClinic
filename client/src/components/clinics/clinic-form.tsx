@@ -15,13 +15,16 @@ import {
 } from "@/components/ui/form";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useEffect } from "react";
 
 interface ClinicFormProps {
   onSuccess?: () => void;
+  clinic?: { id: number; name: string; address: string; phone: string; email: string } | null;
 }
 
-export function ClinicForm({ onSuccess }: ClinicFormProps) {
+export function ClinicForm({ onSuccess, clinic }: ClinicFormProps) {
   const { toast } = useToast();
+  const isEditing = !!clinic;
 
   const form = useForm({
     resolver: zodResolver(insertClinicSchema),
@@ -33,16 +36,35 @@ export function ClinicForm({ onSuccess }: ClinicFormProps) {
     },
   });
 
+  // Set form values when editing an existing clinic
+  useEffect(() => {
+    if (clinic) {
+      form.reset({
+        name: clinic.name,
+        address: clinic.address,
+        phone: clinic.phone,
+        email: clinic.email,
+      });
+    }
+  }, [clinic, form]);
+
   const mutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", "/api/clinics", data);
-      return res.json();
+      // If editing, use PUT request with clinic ID
+      if (isEditing && clinic) {
+        const res = await apiRequest("PUT", `/api/clinics/${clinic.id}`, data);
+        return res.json();
+      } else {
+        // If creating, use POST request
+        const res = await apiRequest("POST", "/api/clinics", data);
+        return res.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clinics"] });
       toast({
         title: "Success",
-        description: "Clinic created successfully",
+        description: isEditing ? "Clinic updated successfully" : "Clinic created successfully",
       });
       form.reset();
       onSuccess?.();
@@ -126,7 +148,7 @@ export function ClinicForm({ onSuccess }: ClinicFormProps) {
           {mutation.isPending && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           )}
-          Create Clinic
+          {isEditing ? "Update Clinic" : "Create Clinic"}
         </Button>
       </form>
     </Form>
