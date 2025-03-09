@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext } from "react";
+import { createContext, ReactNode, useContext, useEffect } from "react";
 import {
   useQuery,
   useMutation,
@@ -87,6 +87,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
   });
+
+  const [location, navigate] = useLocation();
+
+  useEffect(() => {
+    if (user) {
+      if (user.role === "SUPER_ADMIN") {
+        if (!location.includes("/superadmin")) {
+          navigate("/superadmin/dashboard");
+        }
+      } else if (user.role === "CLINIC_ADMIN") {
+        if (!location.includes("/clinic")) {
+          navigate("/clinic/dashboard");
+        }
+      } else if (user.role === "DOCTOR") {
+        if (!location.includes("/doctor")) {
+          navigate("/doctor/dashboard");
+        }
+      } else if (user.role === "CLIENT") {
+        if (!location.includes("/client")) {
+          navigate("/client/dashboard");
+        }
+      }
+    }
+  }, [user, location, navigate]);
 
   return (
     <AuthContext.Provider

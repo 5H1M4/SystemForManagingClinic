@@ -10,111 +10,125 @@ import {
   UserPlus,
   FilePlus,
   Clock,
+  LogOut,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { CalendarView } from "@/components/appointments/calendar-view";
 
 export default function ClinicDashboard() {
-  const { user } = useAuth();
-  const clinicId = user?.clinicId;
+  const { user, logoutMutation } = useAuth();
+  const [location, setLocation] = useLocation();
 
-  const { data: appointments = [], isLoading: loadingAppointments } = useQuery({
-    queryKey: [`/api/clinics/${clinicId}/appointments`],
-    enabled: !!clinicId,
+  // Fetch clinic data for the current admin
+  const { data: clinic, isLoading: isClinicLoading } = useQuery({
+    queryKey: ["/api/clinics/current"],
+    queryFn: async () => {
+      const response = await fetch("/api/clinics/current");
+      if (!response.ok) {
+        throw new Error("Failed to fetch clinic data");
+      }
+      return response.json();
+    },
+    enabled: !!user && user.role === "CLINIC_ADMIN"
   });
 
-  const { data: doctors = [], isLoading: loadingDoctors } = useQuery({
-    queryKey: [`/api/clinics/${clinicId}/doctors`],
-    enabled: !!clinicId,
+  // Fetch appointments for this clinic
+  const { data: appointments = [], isLoading: isAppointmentsLoading } = useQuery({
+    queryKey: [`/api/clinics/${user?.clinicId}/appointments`],
+    queryFn: async () => {
+      const response = await fetch(`/api/clinics/${user?.clinicId}/appointments`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch appointments");
+      }
+      return response.json();
+    },
+    enabled: !!user?.clinicId
   });
 
-  const { data: payments = [], isLoading: loadingPayments } = useQuery({
-    queryKey: [`/api/clinics/${clinicId}/payments`],
-    enabled: !!clinicId,
+  // Fetch services for this clinic
+  const { data: services = [], isLoading: isServicesLoading } = useQuery({
+    queryKey: [`/api/clinics/${user?.clinicId}/services`],
+    queryFn: async () => {
+      const response = await fetch(`/api/clinics/${user?.clinicId}/services`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch services");
+      }
+      return response.json();
+    },
+    enabled: !!user?.clinicId
   });
 
-  if (loadingAppointments || loadingDoctors || loadingPayments) {
+  const handleLogout = () => {
+    logoutMutation.mutate();
+    setLocation("/");
+  };
+
+  if (isClinicLoading || isAppointmentsLoading || isServicesLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
-  const totalRevenue = payments.reduce(
-    (sum: number, payment: any) => sum + Number(payment.amount),
-    0
-  );
-
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Clinic Dashboard</h2>
-        <div className="flex gap-2">
-          <Link href="/clinic/doctors/new">
-            <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
-              <UserPlus className="mr-2 h-4 w-4" /> Add Doctor
-            </Button>
-          </Link>
-          <Link href="/clinic/services/new">
-            <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600">
-              <FilePlus className="mr-2 h-4 w-4" /> Add Service
-            </Button>
-          </Link>
-        </div>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Clinic Dashboard</h1>
+        <Button variant="outline" onClick={handleLogout}>
+          <LogOut className="mr-2 h-4 w-4" /> Logout
+        </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Doctors</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{doctors.length}</div>
-          </CardContent>
-        </Card>
+      {clinic && (
+        <div className="mb-6">
+          <Card>
+            <CardHeader className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+              <CardTitle>{clinic.name}</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <p><strong>Address:</strong> {clinic.address}</p>
+              <p><strong>Phone:</strong> {clinic.phone}</p>
+              <p><strong>Email:</strong> {clinic.email}</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Today's Appointments
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Total Appointments</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {appointments.filter((apt: any) => {
-                const today = new Date().toISOString().split("T")[0];
-                return apt.startTime.startsWith(today);
-              }).length}
-            </div>
+            <div className="text-2xl font-bold">{appointments.length}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Services Offered</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
+            <div className="text-2xl font-bold">{services.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Staff Members</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">
-              ${totalRevenue?.toFixed(2) || "0.00"}
+              {/* This would need a staff count query */}
+              {clinic?.staffCount || 0}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Appointments Calendar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CalendarView clinicId={clinicId!} />
-          </CardContent>
-        </Card>
-      </div>
+      {/* Add more dashboard sections as needed */}
     </div>
   );
 }

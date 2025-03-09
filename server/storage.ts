@@ -428,27 +428,47 @@ export class PostgresStorage implements IStorage {
   // ======================
   async createClinicAdmin(clinicId: number, adminData: InsertUser): Promise<User> {
     try {
-      // Start a transaction
-      await pool.query('BEGIN');
-      
-      // Create the user with CLINIC_ADMIN role
-      const adminWithRole = { ...adminData, role: "CLINIC_ADMIN", clinicId };
-      const user = await this.createUser(adminWithRole);
-      
-      // Update the clinic to associate with this admin if needed
-      // This is optional depending on your data model
-      await pool.query(
-        "UPDATE clinics SET admin_id = $1 WHERE id = $2",
-        [user.id, clinicId]
+      // Verify the clinic exists
+      const clinic = await this.getClinic(clinicId);
+      if (!clinic) {
+        throw new Error(`Clinic with ID ${clinicId} not found`);
+      }
+
+      // Ensure the password is in the correct format (should already be hashed)
+      if (!adminData.password || !adminData.password.includes('.')) {
+        console.error("Warning: Password may not be properly hashed");
+      }
+
+      // Create the admin user with clinic_id
+      const userData = {
+        ...adminData,
+        role: "CLINIC_ADMIN",
+        clinicId: clinicId
+      };
+
+      // Insert the user into the database
+      const { rows } = await pool.query(
+        `INSERT INTO users (
+          username, password, first_name, last_name, email, phone, role, clinic_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [
+          userData.username,
+          userData.password,
+          userData.firstName,
+          userData.lastName,
+          userData.email,
+          userData.phone || null,
+          userData.role,
+          userData.clinicId
+        ]
       );
-      
-      // Commit the transaction
-      await pool.query('COMMIT');
-      
-      return user;
+
+      if (rows.length === 0) {
+        throw new Error("Failed to create clinic admin");
+      }
+
+      return this.convertUser(rows[0]);
     } catch (error) {
-      // Rollback in case of error
-      await pool.query('ROLLBACK');
       console.error("Error creating clinic admin:", error);
       throw new Error("Failed to create clinic admin");
     }
@@ -478,6 +498,84 @@ export class PostgresStorage implements IStorage {
     } catch (error) {
       console.error("Error deleting clinic admin:", error);
       throw new Error("Failed to delete clinic admin");
+    }
+  }
+
+  async updateUser(userId: number, updateData: Partial<User>): Promise<User | null> {
+    try {
+      // Start by getting the current user to ensure it exists
+      const currentUser = await this.getUser(userId);
+      if (!currentUser) {
+        return null;
+      }
+
+      // Build the SET clause and values array dynamically based on provided fields
+      let setClause = [];
+      let values = [];
+      let paramIndex = 1;
+
+      if (updateData.username !== undefined) {
+        setClause.push(`username = $${paramIndex++}`);
+        values.push(updateData.username);
+      }
+      
+      if (updateData.password !== undefined) {
+        setClause.push(`password = $${paramIndex++}`);
+        values.push(updateData.password);
+      }
+      
+      if (updateData.firstName !== undefined) {
+        setClause.push(`first_name = $${paramIndex++}`);
+        values.push(updateData.firstName);
+      }
+      
+      if (updateData.lastName !== undefined) {
+        setClause.push(`last_name = $${paramIndex++}`);
+        values.push(updateData.lastName);
+      }
+      
+      if (updateData.email !== undefined) {
+        setClause.push(`email = $${paramIndex++}`);
+        values.push(updateData.email);
+      }
+      
+      if (updateData.phone !== undefined) {
+        setClause.push(`phone = $${paramIndex++}`);
+        values.push(updateData.phone);
+      }
+      
+      if (updateData.role !== undefined) {
+        setClause.push(`role = $${paramIndex++}`);
+        values.push(updateData.role);
+      }
+      
+      if (updateData.clinicId !== undefined) {
+        setClause.push(`clinic_id = $${paramIndex++}`);
+        values.push(updateData.clinicId);
+      }
+
+      // If no fields to update, return the current user
+      if (setClause.length === 0) {
+        return currentUser;
+      }
+
+      // Add the user ID as the last parameter
+      values.push(userId);
+
+      // Execute the update query
+      const { rows } = await pool.query(
+        `UPDATE users SET ${setClause.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+        values
+      );
+
+      if (rows.length === 0) {
+        return null;
+      }
+
+      return this.convertUser(rows[0]);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      throw new Error("Failed to update user");
     }
   }
 }
