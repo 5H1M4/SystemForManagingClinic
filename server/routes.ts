@@ -107,13 +107,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Appointment routes
   app.post("/api/appointments", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-
-    const parsed = insertAppointmentSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
-
-    const appointment = await storage.createAppointment(parsed.data);
-    res.status(201).json(appointment);
+    if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {
+      return res.sendStatus(403);
+    }
+    
+    try {
+      // Assign clinic ID based on the authenticated user
+      const appointmentData = {
+        ...req.body,
+        clinicId: req.user.clinicId,
+        status: 'SCHEDULED'
+      };
+      
+      const appointment = await storage.createAppointment(appointmentData);
+      res.status(201).json(appointment);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
   });
 
   app.get("/api/clinics/:clinicId/appointments", async (req, res) => {
@@ -337,6 +347,195 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching current clinic:', error);
       res.status(500).json({ message: "Failed to fetch current clinic" });
+    }
+  });
+
+  // Add these routes for services management
+  app.get('/api/services', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    if (req.user.clinicId) {
+      const services = await storage.listServicesByClinic(req.user.clinicId);
+      res.json(services);
+    } else {
+      res.status(400).json({ error: "Clinic ID is required" });
+    }
+  });
+
+  app.post('/api/services', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      const service = await storage.createService({ ...req.body, clinicId: req.user.clinicId });
+      res.status(201).json(service);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.put('/api/services/:serviceId', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      const updatedService = await storage.updateService(Number(req.params.serviceId), req.body);
+      res.json(updatedService);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.delete('/api/services/:serviceId', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      await storage.deleteService(Number(req.params.serviceId));
+      res.sendStatus(204);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Add these routes for doctor management
+  app.get('/api/doctors', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      if (req.user.clinicId === null) {
+        throw new Error("Clinic ID is null");
+      }
+      const doctors = await storage.listDoctorsByClinic(req.user.clinicId);
+      res.json(doctors);
+    } catch (error) {
+      console.error('Error fetching doctors:', error);
+      res.status(500).json({ error: "Failed to fetch doctors" });
+    }
+  });
+
+  app.post('/api/doctors', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      const doctor = await storage.createDoctor({
+        ...req.body,
+        clinicId: req.user.clinicId,
+        role: "DOCTOR"
+      });
+      res.status(201).json(doctor);
+    } catch (error) {
+      console.error('Error creating doctor:', error);
+      res.status(500).json({ error: "Failed to create doctor" });
+    }
+  });
+
+  app.put('/api/doctors/:doctorId', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      const doctor = await storage.updateDoctor(Number(req.params.doctorId), req.body);
+      res.json(doctor);
+    } catch (error) {
+      console.error('Error updating doctor:', error);
+      res.status(500).json({ error: "Failed to update doctor" });
+    }
+  });
+
+  app.delete('/api/doctors/:doctorId', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      await storage.deleteDoctor(Number(req.params.doctorId));
+      res.sendStatus(204);
+    } catch (error) {
+      console.error('Error deleting doctor:', error);
+      res.status(500).json({ error: "Failed to delete doctor" });
+    }
+  });
+
+  // Add these routes for scheduling and revenue
+  app.get('/api/appointments', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    if (req.user.clinicId) {
+      const appointments = await storage.listAppointmentsByClinic(req.user.clinicId);
+      res.json(appointments);
+    } else {
+      res.status(400).json({ error: "Clinic ID is required" });
+    }
+  });
+
+  app.post('/api/appointments/:appointmentId/cancel', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    try {
+      await storage.cancelAppointment(Number(req.params.appointmentId));
+      res.sendStatus(204);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/revenue', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+      return res.sendStatus(403);
+    }
+    if (req.user.clinicId) {
+      const revenue = await storage.calculateRevenue(req.user.clinicId);
+      res.json(revenue);
+    } else {
+      res.status(400).json({ error: "Clinic ID is required" });
+    }
+  });
+
+  // Add these routes for appointment management
+  app.put('/api/appointments/:appointmentId', async (req, res) => {
+    if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {
+      return res.sendStatus(403);
+    }
+    
+    try {
+      const appointmentId = Number(req.params.appointmentId);
+      
+      // Verify that the appointment belongs to the user's clinic
+      const appointment = await storage.getAppointment(appointmentId);
+      if (!appointment || appointment.clinicId !== req.user.clinicId) {
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+      
+      const updatedAppointment = await storage.updateAppointment(appointmentId, req.body);
+      res.json(updatedAppointment);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/appointments/:appointmentId/complete', async (req, res) => {
+    if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {
+      return res.sendStatus(403);
+    }
+    
+    try {
+      const appointmentId = Number(req.params.appointmentId);
+      
+      // Verify that the appointment belongs to the user's clinic
+      const appointment = await storage.getAppointment(appointmentId);
+      if (!appointment || appointment.clinicId !== req.user.clinicId) {
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+      
+      const completedAppointment = await storage.completeAppointment(appointmentId);
+      res.json(completedAppointment);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
     }
   });
 

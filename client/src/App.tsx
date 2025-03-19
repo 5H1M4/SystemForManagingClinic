@@ -8,7 +8,7 @@ import LandingPage from "@/pages/landing-page";
 import AuthPage from "@/pages/auth-page";
 import StaffAuth from "@/pages/staff-auth";
 import SuperAdminDashboard from "@/pages/superadmin/dashboard";
-import ClinicDashboard from "@/pages/clinic/dashboard";
+import ClinicDashboard from "@/pages/clinic-admin/dashboard"; {/*clinic admin dashboard changed this line from /clinic to -> /clinic-admin/dashboard*/}
 import DoctorDashboard from "@/pages/doctor/dashboard";
 import ClientDashboard from "@/pages/client/dashboard";
 import NewAppointment from "@/pages/appointments/new";

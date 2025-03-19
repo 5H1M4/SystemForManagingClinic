@@ -254,7 +254,7 @@ export class PostgresStorage implements IStorage {
   // ==================
   // Service Operations
   // ==================
-  async createService(insertService: InsertService): Promise<Service> {
+  async addService(insertService: InsertService): Promise<Service> {
     try {
       const { rows } = await pool.query(
         `INSERT INTO services 
@@ -305,22 +305,22 @@ export class PostgresStorage implements IStorage {
   // ======================
   // Appointment Operations
   // ======================
-  async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {
+  async createAppointment(appointmentData: InsertAppointment): Promise<Appointment> {
     try {
       const { rows } = await pool.query(
         `INSERT INTO appointments 
-           (client_id, doctor_id, service_id, start_time, end_time, status, clinic_id)
+           (client_id, doctor_id, service_id, start_time, notes, status, clinic_id)
          VALUES 
            ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
         [
-          insertAppointment.clientId,
-          insertAppointment.doctorId,
-          insertAppointment.serviceId,
-          insertAppointment.startTime,
-          insertAppointment.endTime,
-          insertAppointment.status,
-          insertAppointment.clinicId,
+          appointmentData.clientId,
+          appointmentData.doctorId,
+          appointmentData.serviceId,
+          appointmentData.startTime,
+          
+          appointmentData.status,
+          appointmentData.clinicId,
         ]
       );
       return this.convertAppointment(rows[0]);
@@ -577,6 +577,161 @@ export class PostgresStorage implements IStorage {
       console.error("Error updating user:", error);
       throw new Error("Failed to update user");
     }
+  }
+
+  async createService(serviceData: InsertService): Promise<Service> {
+    const { rows } = await pool.query(
+      "INSERT INTO services (name, description, price, duration, clinic_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [serviceData.name, serviceData.description, serviceData.price, serviceData.duration, serviceData.clinicId]
+    );
+    return rows[0];
+  }
+
+  async updateService(serviceId: number, updateData: Partial<Service>): Promise<Service> {
+    const { rows } = await pool.query(
+      "UPDATE services SET name = $1, description = $2, price = $3, duration = $4 WHERE id = $5 RETURNING *",
+      [updateData.name, updateData.description, updateData.price, updateData.duration, serviceId]
+    );
+    return rows[0];
+  }
+
+  async deleteService(serviceId: number): Promise<void> {
+    await pool.query("DELETE FROM services WHERE id = $1", [serviceId]);
+  }
+
+  async listDoctorsByClinic(clinicId: number): Promise<User[]> {
+    const { rows } = await pool.query(
+      `SELECT * FROM users WHERE clinic_id = $1 AND role = 'DOCTOR'`,
+      [clinicId]
+    );
+    return rows.map(this.convertUser);
+  }
+  
+
+  async createDoctor(doctorData: InsertUser): Promise<User> {
+    const { rows } = await pool.query(
+      "INSERT INTO users (username, password, first_name, last_name, email, phone, role, clinic_id) VALUES ($1, $2, $3, $4, $5, $6, 'DOCTOR', $7) RETURNING *",
+      [doctorData.username, doctorData.password, doctorData.firstName, doctorData.lastName, doctorData.email, doctorData.phone, doctorData.clinicId]
+    );
+    return rows[0];
+  }
+
+  async updateDoctor(doctorId: number, updateData: Partial<User>): Promise<User> {
+    // Build the query dynamically based on which fields are provided
+    const fields = [];
+    const values = [];
+    let paramCounter = 1;
+
+    if (updateData.username !== undefined) {
+      fields.push(`username = $${paramCounter++}`);
+      values.push(updateData.username);
+    }
+    
+    if (updateData.password !== undefined) {
+      fields.push(`password = $${paramCounter++}`);
+      values.push(updateData.password);
+    }
+    
+    if (updateData.firstName !== undefined) {
+      fields.push(`first_name = $${paramCounter++}`);
+      values.push(updateData.firstName);
+    }
+    
+    if (updateData.lastName !== undefined) {
+      fields.push(`last_name = $${paramCounter++}`);
+      values.push(updateData.lastName);
+    }
+    
+    if (updateData.email !== undefined) {
+      fields.push(`email = $${paramCounter++}`);
+      values.push(updateData.email);
+    }
+    
+    if (updateData.phone !== undefined) {
+      fields.push(`phone = $${paramCounter++}`);
+      values.push(updateData.phone);
+    }
+    
+    // Add the doctor ID to the values array
+    values.push(doctorId);
+    
+    const { rows } = await pool.query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramCounter} RETURNING *`,
+      values
+    );
+    
+    return rows[0];
+  }
+
+  async deleteDoctor(doctorId: number): Promise<void> {
+    await pool.query("DELETE FROM users WHERE id = $1", [doctorId]);
+  }
+
+  async cancelAppointment(appointmentId: number): Promise<void> {
+    await pool.query("UPDATE appointments SET status = 'CANCELLED' WHERE id = $1", [appointmentId]);
+  }
+
+  async calculateRevenue(clinicId: number): Promise<any> {
+    // Implement your revenue calculation logic here
+    // This should return data matching the Revenue interface defined above
+  }
+
+  async updateAppointment(
+    appointmentId: number,
+    updateData: Partial<Appointment>
+  ): Promise<Appointment> {
+    const query = `
+      UPDATE appointments
+      SET 
+        client_id  = COALESCE($1, client_id),
+        doctor_id  = COALESCE($2, doctor_id),
+        service_id = COALESCE($3, service_id),
+        start_time = COALESCE($4, start_time),
+        end_time   = COALESCE($5, end_time),
+        status     = COALESCE($6, status),
+        clinic_id  = COALESCE($7, clinic_id)
+      WHERE id = $8
+      RETURNING *;
+    `;
+  
+    const values = [
+      updateData.clientId ?? null,
+      updateData.doctorId ?? null,
+      updateData.serviceId ?? null,
+      updateData.startTime ?? null,
+      updateData.endTime ?? null,
+      updateData.status ?? null,
+      updateData.clinicId ?? null,
+      appointmentId
+    ];
+  
+    try {
+      const { rows } = await pool.query(query, values);
+      if (!rows.length) {
+        throw new Error("Appointment not found.");
+      }
+      return rows[0];
+    } catch (error) {
+      console.error("Error updating appointment:", error);
+      throw new Error("Failed to update appointment.");
+    }
+  }
+  
+
+  async completeAppointment(appointmentId: number): Promise<Appointment> {
+    const { rows } = await pool.query(
+      "UPDATE appointments SET status = 'COMPLETED' WHERE id = $1 RETURNING *",
+      [appointmentId]
+    );
+    return rows[0];
+  }
+
+  async getAppointment(appointmentId: number): Promise<Appointment | null> {
+    const { rows } = await pool.query(
+      "SELECT * FROM appointments WHERE id = $1",
+      [appointmentId]
+    );
+    return rows[0] || null;
   }
 }
 
