@@ -107,24 +107,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Appointment routes
   app.post("/api/appointments", async (req, res) => {
+    console.log("=== Starting Appointment Creation ===");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    console.log("User:", JSON.stringify(req.user, null, 2));
+  
     if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {
+      console.log("Authentication failed - User role:", req.user?.role);
       return res.sendStatus(403);
     }
-    
+  
     try {
-      // Assign clinic ID based on the authenticated user
+      // Parse and validate the start time
+      const startTime = new Date(req.body.startTime);
+      if (isNaN(startTime.getTime())) {
+        throw new Error("Invalid start time format");
+      }
+  
+      // Get the service to calculate duration
+      console.log("Fetching service details for ID:", req.body.serviceId);
+      const service = await storage.getService(Number(req.body.serviceId));
+      if (!service) {
+        console.log("Service not found for ID:", req.body.serviceId);
+        return res.status(400).json({ error: "Invalid service selected" });
+      }
+  
+      // Calculate end time
+      const endTime = new Date(startTime.getTime() + service.duration * 60000);
+  
+      // Check for duplicate appointments with validated dates
+      const existingAppointment = await storage.checkDuplicateAppointment({
+        doctorId: Number(req.body.doctorId),
+        startTime,
+        endTime
+      });
+  
+      if (existingAppointment) {
+        return res.status(400).json({ 
+          error: "Doctor already has an appointment scheduled for this time slot" 
+        });
+      }
+  
+      // Build appointment data
       const appointmentData = {
-        ...req.body,
+        clientId: req.body.clientId || 1,
+        doctorId: Number(req.body.doctorId),
+        serviceId: Number(req.body.serviceId),
+        startTime,
+        endTime,
+        notes: req.body.notes || "",
         clinicId: req.user.clinicId,
-        status: 'SCHEDULED'
+        clientName: req.body.clientName,
+        clientEmail: req.body.clientEmail,
+        clientPhone: req.body.clientPhone,
       };
+  
+      const parsed = insertAppointmentSchema.safeParse(appointmentData);
+      if (!parsed.success) {
+        return res.status(400).json(parsed.error);
+      }
       
-      const appointment = await storage.createAppointment(appointmentData);
+      const appointment = await storage.createAppointment(parsed.data);
+      console.log("Appointment created successfully:", JSON.stringify(appointment, null, 2));
       res.status(201).json(appointment);
     } catch (error: any) {
+      console.error("Error creating appointment:", error.message);
+      console.error("Error stack:", error.stack);
       res.status(400).json({ error: error.message });
     }
   });
+  
+  //end of appointment routes
 
   app.get("/api/clinics/:clinicId/appointments", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);

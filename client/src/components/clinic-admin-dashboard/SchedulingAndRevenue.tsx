@@ -232,39 +232,46 @@ export default function SchedulingAndRevenue() {
   // Create a new appointment
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormValues) => {
-      // Format the date and time for the API
-      const date = data.startTime;
-      // Assuming startTime is a Date object and includes the time
-      // Prepare the data for the API
+      console.log('Creating appointment with data:', JSON.stringify(data, null, 2));
+      
       const appointmentData = {
-        clientName: data.clientName,
-        clientEmail: data.clientEmail,
-        clientPhone: data.clientPhone,
+        clientId: data.clientId,
         doctorId: Number(data.doctorId),
         serviceId: Number(data.serviceId),
-        startTime: date.toISOString(),
-        notes: data.notes,
+        startTime: data.startTime.toISOString(),
+        notes: data.notes || '',
+        status: 'SCHEDULED',
+        clientName: data.clientName,
+        clientEmail: data.clientEmail,
+        clientPhone: data.clientPhone
       };
-      return await apiRequest('POST', '/api/appointments', appointmentData);
+      
+      console.log('Formatted appointment data:', JSON.stringify(appointmentData, null, 2));
+      
+      try {
+        const response = await apiRequest('POST', '/api/appointments', appointmentData);
+        console.log('API Response:', JSON.stringify(response, null, 2));
+        return response;
+      } catch (error) {
+        console.error('API Error:', error);
+        throw error;
+      }
     },
-    onSuccess: () => {
-      // Reset form and close dialog
-      createForm.reset();
-      setIsCreateAppointmentOpen(false);
-      
-      // Refetch appointments to update the UI
+    onSuccess: (data) => {
+      console.log('Appointment created successfully:', JSON.stringify(data, null, 2));
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      
       toast({
-        title: "Appointment created",
-        description: "The appointment has been scheduled successfully.",
-        variant: "default",
+        title: "Success",
+        description: "Appointment created successfully",
       });
+      setIsCreateAppointmentOpen(false);
+      createForm.reset();
     },
     onError: (error: any) => {
+      console.error('Appointment creation error:', error);
       toast({
-        title: "Failed to create appointment",
-        description: error.message || "An unexpected error occurred.",
+        title: "Error",
+        description: error.message || "Failed to create appointment",
         variant: "destructive",
       });
     },

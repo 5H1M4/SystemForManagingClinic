@@ -49,6 +49,11 @@ export interface IStorage {
   
   // Session store
   sessionStore: session.Store;
+  
+  // Service operations
+  getService(serviceId: number): Promise<Service | null>;
+
+  checkDuplicateAppointment(params: { doctorId: number; startTime: Date; endTime: Date }): Promise<boolean>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -306,27 +311,65 @@ export class PostgresStorage implements IStorage {
   // Appointment Operations
   // ======================
   async createAppointment(appointmentData: InsertAppointment): Promise<Appointment> {
+    console.log('=== Starting createAppointment in Storage ===');
     try {
-      const { rows } = await pool.query(
-        `INSERT INTO appointments 
-           (client_id, doctor_id, service_id, start_time, notes, status, clinic_id)
-         VALUES 
-           ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [
-          appointmentData.clientId,
-          appointmentData.doctorId,
-          appointmentData.serviceId,
-          appointmentData.startTime,
-          
-          appointmentData.status,
-          appointmentData.clinicId,
-        ]
-      );
-      return this.convertAppointment(rows[0]);
+      console.log('Appointment data received:', JSON.stringify(appointmentData, null, 2));
+
+      // Construct the SQL query
+      const query = `
+        INSERT INTO appointments (
+          client_id, 
+          doctor_id, 
+          service_id, 
+          start_time, 
+          end_time, 
+          notes, 
+          status, 
+          clinic_id,
+          client_name,
+          client_email,
+          client_phone
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`;
+
+      const values = [
+        appointmentData.clientId,
+        appointmentData.doctorId,
+        appointmentData.serviceId,
+        appointmentData.startTime,
+        appointmentData.endTime,
+        appointmentData.notes || '',
+        appointmentData.status || 'SCHEDULED',
+        appointmentData.clinicId,
+        appointmentData.clientName || null,
+        appointmentData.clientEmail || null,
+        appointmentData.clientPhone || null
+      ];
+
+      console.log('Executing SQL query:', query);
+      console.log('Query values:', JSON.stringify(values, null, 2));
+
+      const { rows } = await pool.query(query, values);
+      
+      if (rows.length === 0) {
+        console.error('No rows returned from insert query');
+        throw new Error('Failed to create appointment - no rows returned');
+      }
+
+      console.log('Raw database result:', JSON.stringify(rows[0], null, 2));
+      const appointment = this.convertAppointment(rows[0]);
+      console.log('Converted appointment:', JSON.stringify(appointment, null, 2));
+      
+      return appointment;
     } catch (error) {
-      console.error("Error creating appointment:", error);
-      throw new Error("Failed to create appointment");
+      if (error instanceof Error) {
+        console.error('Error in createAppointment:', error.message);
+        console.error('Error stack:', error.stack);
+        throw new Error(`Failed to create appointment: ${error.message}`);
+      } else {
+        console.error('Unknown error in createAppointment:', error);
+        throw new Error('Failed to create appointment due to an unknown error');
+      }
     }
   }
 
@@ -358,7 +401,8 @@ export class PostgresStorage implements IStorage {
 
   // Helper function to convert a DB row to the expected Appointment shape
   private convertAppointment(row: any): Appointment {
-    return {
+    console.log('Converting row to Appointment:', JSON.stringify(row, null, 2));
+    const appointment = {
       id: row.id,
       clientId: row.client_id,
       doctorId: row.doctor_id,
@@ -367,7 +411,13 @@ export class PostgresStorage implements IStorage {
       endTime: row.end_time,
       status: row.status,
       clinicId: row.clinic_id,
+      notes: row.notes,
+      clientName: row.client_name,
+      clientEmail: row.client_email,
+      clientPhone: row.client_phone
     };
+    console.log('Converted appointment:', JSON.stringify(appointment, null, 2));
+    return appointment;
   }
 
   // ===================
@@ -732,6 +782,48 @@ export class PostgresStorage implements IStorage {
       [appointmentId]
     );
     return rows[0] || null;
+  }
+
+  async getService(serviceId: number): Promise<Service | null> {
+    try {
+      const { rows } = await pool.query(
+        "SELECT * FROM services WHERE id = $1",
+        [serviceId]
+      );
+      if (rows.length === 0) return null;
+      return this.convertService(rows[0]);
+    } catch (error) {
+      console.error("Error fetching service:", error);
+      throw new Error("Failed to fetch service");
+    }
+  }
+
+  async checkDuplicateAppointment({ doctorId, startTime, endTime }: { 
+    doctorId: number; 
+    startTime: Date; 
+    endTime: Date; 
+  }): Promise<boolean> {
+    try {
+      // Ensure proper date formatting
+      const formattedStartTime = startTime instanceof Date ? startTime.toISOString() : startTime;
+      const formattedEndTime = endTime instanceof Date ? endTime.toISOString() : endTime;
+
+      const { rows } = await pool.query(
+        `SELECT id FROM appointments 
+         WHERE doctor_id = $1 
+         AND status != 'CANCELLED'
+         AND (
+           (start_time <= $2 AND end_time > $2)
+           OR (start_time < $3 AND end_time >= $3)
+           OR (start_time >= $2 AND end_time <= $3)
+         )`,
+        [doctorId, formattedStartTime, formattedEndTime]
+      );
+      return rows.length > 0;
+    } catch (error) {
+      console.error("Error checking duplicate appointment:", error);
+      return false; // Return false on error to allow the main error handling to catch it
+    }
   }
 }
 

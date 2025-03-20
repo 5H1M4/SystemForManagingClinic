@@ -47,7 +47,11 @@ export const appointments = pgTable("appointments", {
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
   status: text("status").notNull().$type<'SCHEDULED' | 'COMPLETED' | 'CANCELLED'>(),
-  clinicId: integer("clinic_id").references(() => clinics.id).notNull()
+  clinicId: integer("clinic_id").references(() => clinics.id).notNull(),
+  notes: text("notes"),
+  clientName: text("client_name"),
+  clientEmail: text("client_email"),
+  clientPhone: text("client_phone")
 });
 
 export const payments = pgTable("payments", {
@@ -72,7 +76,20 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export const insertClinicSchema = createInsertSchema(clinics);
 export const insertServiceSchema = createInsertSchema(services);
-export const insertAppointmentSchema = createInsertSchema(appointments);
+export const insertAppointmentSchema = createInsertSchema(appointments)
+  .omit({ endTime: true })
+  .extend({
+    startTime: z.string().or(z.date()),
+    endTime: z.string().or(z.date()).optional(),
+    serviceId: z.number(),
+    doctorId: z.number(),
+    clientId: z.number(),
+    clientName: z.string().optional(),     // Add this line
+    clientEmail: z.string().optional(),    // Add this line
+    clientPhone: z.string().optional(),  
+    notes: z.string().optional(),
+    status: z.enum(['SCHEDULED', 'COMPLETED', 'CANCELLED']).default('SCHEDULED'),
+  });
 export const insertPaymentSchema = createInsertSchema(payments);
 
 // Types
