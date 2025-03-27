@@ -511,16 +511,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Add these routes for scheduling and revenue
+  // Fix appointments route to properly handle date filtering
   app.get('/api/appointments', async (req, res) => {
     if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
       return res.sendStatus(403);
     }
-    if (req.user.clinicId) {
-      const appointments = await storage.listAppointmentsByClinic(req.user.clinicId);
-      res.json(appointments);
-    } else {
-      res.status(400).json({ error: "Clinic ID is required" });
+    
+    try {
+      if (req.user.clinicId) {
+        // Get the date parameter from the query string
+        const dateParam = req.query.date as string;
+        console.log(`Appointment request for date: ${dateParam}`);
+        
+        let date: Date;
+        if (dateParam) {
+          // Create date object from the date string (YYYY-MM-DD)
+          date = new Date(dateParam);
+          
+          // Ensure it's a valid date
+          if (isNaN(date.getTime())) {
+            console.error(`Invalid date parameter: ${dateParam}`);
+            return res.status(400).json({ error: "Invalid date parameter" });
+          }
+          
+        } else {
+          date = new Date(); // Default to today if no date provided
+        }
+        
+        console.log(`Querying appointments for clinic ${req.user.clinicId} on date ${date.toISOString().split('T')[0]}`);
+        
+        // Get appointments for the clinic and date
+        const appointments = await storage.listAppointmentsByClinicAndDate(req.user.clinicId, date);
+        
+        console.log(`Found ${appointments.length} appointments for the specified date`);
+        console.log('Appointments:', JSON.stringify(appointments.map(a => ({ 
+          id: a.id,
+          clientName: a.clientName,
+          startTime: a.startTime,
+          formattedDate: new Date(a.startTime).toISOString().split('T')[0]
+        })), null, 2));
+        
+        res.json(appointments);
+      } else {
+        res.status(400).json({ error: "Clinic ID is required" });
+      }
+    } catch (error) {
+      console.error('Error in appointments route:', error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

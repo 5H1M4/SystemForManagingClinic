@@ -54,6 +54,8 @@ export interface IStorage {
   getService(serviceId: number): Promise<Service | null>;
 
   checkDuplicateAppointment(params: { doctorId: number; startTime: Date; endTime: Date }): Promise<boolean>;
+
+  listAppointmentsByClinicAndDate(clinicId: number, date: Date): Promise<Appointment[]>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -360,7 +362,7 @@ export class PostgresStorage implements IStorage {
       const appointment = this.convertAppointment(rows[0]);
       console.log('Converted appointment:', JSON.stringify(appointment, null, 2));
       
-      return appointment;
+    return appointment;
     } catch (error) {
       if (error instanceof Error) {
         console.error('Error in createAppointment:', error.message);
@@ -401,7 +403,7 @@ export class PostgresStorage implements IStorage {
 
   // Helper function to convert a DB row to the expected Appointment shape
   private convertAppointment(row: any): Appointment {
-    console.log('Converting row to Appointment:', JSON.stringify(row, null, 2));
+    {/*console.log('Converting row to Appointment:', JSON.stringify(row, null, 2));*/}
     const appointment = {
       id: row.id,
       clientId: row.client_id,
@@ -416,7 +418,7 @@ export class PostgresStorage implements IStorage {
       clientEmail: row.client_email,
       clientPhone: row.client_phone
     };
-    console.log('Converted appointment:', JSON.stringify(appointment, null, 2));
+    {/*console.log('Converted appointment:', JSON.stringify(appointment, null, 2));*/}
     return appointment;
   }
 
@@ -823,6 +825,34 @@ export class PostgresStorage implements IStorage {
     } catch (error) {
       console.error("Error checking duplicate appointment:", error);
       return false; // Return false on error to allow the main error handling to catch it
+    }
+  }
+
+  async listAppointmentsByClinicAndDate(clinicId: number, date: Date): Promise<Appointment[]> {
+    try {
+      console.log('Fetching appointments for clinic ID:', clinicId, 'and date:', date);
+      
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      console.log('Date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString());
+      
+      const { rows } = await pool.query(
+        `SELECT * FROM appointments 
+         WHERE clinic_id = $1 
+         AND start_time >= $2 
+         AND start_time <= $3 
+         ORDER BY start_time`,
+        [clinicId, startOfDay, endOfDay]
+      );
+      
+      console.log('Query returned', rows.length, 'appointments');
+      return rows.map(row => this.convertAppointment(row));
+    } catch (error) {
+      console.error("Error listing appointments by date:", error);
+      throw new Error("Failed to list appointments by date");
     }
   }
 }

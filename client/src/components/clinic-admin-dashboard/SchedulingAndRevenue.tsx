@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import {
   Loader2, Calendar as CalendarIcon, DollarSign, Clock, X, RefreshCw, ChevronLeft,
-  ChevronRight, MoreHorizontal, Edit, Trash2, Check, Ban, Plus, User, CreditCard
+  ChevronRight, MoreHorizontal, Edit, Trash2, Check, Ban, Plus, User, CreditCard, Mail, Phone
 } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -63,6 +63,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Pencil } from 'lucide-react';
+import {
+  Box,
+  TableContainer,
+  TableSortLabel,
+  TablePagination,
+  Paper,
+  Checkbox,
+  Toolbar,
+  Typography,
+  Tooltip,
+  IconButton,
+} from '@mui/material';
+
 // Define the appointment form schema
 const appointmentFormSchema = z.object({
   id: z.number().optional(),
@@ -140,6 +155,84 @@ const getStatusBadgeVariant = (status: string) => {
       return 'secondary';
   }
 };
+
+// Define the props for the inline AppointmentTable component
+interface AppointmentTableProps {
+  appointments: Appointment[]; // Use the imported Appointment type
+  getDoctorName: (id: number) => string; // Pass helper functions as props
+  getServiceName: (id: number) => string;
+}
+
+// Inline Functional component to display appointments
+const AppointmentTable: React.FC<AppointmentTableProps> = ({ appointments, getDoctorName, getServiceName }) => {
+  // Helper to format date/time, adjust as needed
+  const formatDateTime = (dateTimeString: string | Date): string => {
+    if (!dateTimeString) return 'N/A';
+    try {
+      const date = typeof dateTimeString === 'string' ? new Date(dateTimeString) : dateTimeString;
+      return format(date, 'Pp'); // Example format: 09/04/2024, 2:00:00 PM
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Invalid Date";
+    }
+  };
+
+  return (
+    <div className="appointment-table-container border rounded-md shadow-sm overflow-x-auto">
+      {appointments.length === 0 ? (
+        <div className="text-center p-8 text-muted-foreground">
+          <CalendarIcon className="h-12 w-12 mx-auto mb-2" />
+          <p>No appointments found for this day.</p>
+        </div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="border p-2 text-left font-medium">Name</th>
+              <th className="border p-2 text-left font-medium">Email</th>
+              <th className="border p-2 text-left font-medium">Start Time</th>
+              <th className="border p-2 text-left font-medium">End Time</th>
+              <th className="border p-2 text-left font-medium">Service</th>
+              <th className="border p-2 text-left font-medium">Doctor</th>
+              <th className="border p-2 text-left font-medium">Status</th>
+              {/* Add Actions header if needed */}
+              {/* <th className="border p-2 text-left font-medium">Actions</th> */}
+            </tr>
+          </thead>
+          <tbody>
+            {appointments.map((appointment) => (
+              <tr key={appointment.id} className="hover:bg-muted/10">
+                <td className="border p-2">{appointment.clientName || 'N/A'}</td>
+                <td className="border p-2">{appointment.clientEmail || 'N/A'}</td>
+                <td className="border p-2">{formatDateTime(appointment.startTime)}</td>
+                <td className="border p-2">{formatDateTime(appointment.endTime)}</td>
+                <td className="border p-2">{getServiceName(appointment.serviceId)}</td>
+                <td className="border p-2">{getDoctorName(appointment.doctorId)}</td>
+                <td className="border p-2">
+                   <Badge variant={getStatusBadgeVariant(appointment.status) as "default" | "destructive" | "outline" | "secondary" | null | undefined}>
+                     {appointment.status}
+                   </Badge>
+                </td>
+                 {/* Add Actions cell if needed */}
+                 {/* <td className="border p-2"> ... actions buttons ... </td> */}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+       {/* Basic Pagination Placeholder - Replace with actual logic if needed */}
+       {appointments.length > 0 && (
+         <div className="flex items-center justify-between p-4 border-t">
+           <div className="text-sm text-muted-foreground">
+             Showing {appointments.length} appointments
+           </div>
+           {/* Add pagination controls if necessary */}
+         </div>
+       )}
+    </div>
+  );
+};
+
 export default function SchedulingAndRevenue() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -151,6 +244,11 @@ export default function SchedulingAndRevenue() {
   const [isEditAppointmentOpen, setIsEditAppointmentOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [orderBy, setOrderBy] = useState<keyof Appointment>('startTime');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [selected, setSelected] = useState<readonly number[]>([]);
   // Create appointment form
   const createForm = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
@@ -178,34 +276,129 @@ export default function SchedulingAndRevenue() {
       notes: '',
     },
   });
-  // Fetch appointments
+  // Fetch appointments for the selected date
   const { 
     data: appointments = [], 
     isLoading: isLoadingAppointments,
-    refetch: refetchAppointments
-  } = useQuery({
-    queryKey: ['appointments'],
+    refetch: refetchAppointments 
+  } = useQuery<Appointment[]>({
+    queryKey: ['appointments', selectedDate.toISOString().split('T')[0]],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/appointments');
-      return response;
+      try {
+        // Format date as YYYY-MM-DD for API request
+        const dateString = selectedDate.toISOString().split('T')[0];
+        console.log(`Fetching appointments for date: ${dateString}`);
+        
+        // Add debugging for the raw response
+        const response = await apiRequest('GET', `/api/appointments?date=${dateString}`);
+        console.log('Raw API response for appointments:', response);
+        
+        // Process the response correctly based on whether it needs parsing
+        let appointmentsData;
+        if (response && typeof response.json === 'function') {
+          appointmentsData = await response.json();
+          console.log('Parsed appointments data:', appointmentsData);
+        } else {
+          appointmentsData = response;
+          console.log('Pre-parsed appointments data:', appointmentsData);
+        }
+        
+        // Ensure we're returning an array and handle date conversion
+        if (Array.isArray(appointmentsData)) {
+          // Convert date strings to Date objects for proper comparison
+          const processedAppointments = appointmentsData.map(appointment => ({
+            ...appointment,
+            // Ensure dates are properly parsed
+            startTime: new Date(appointment.startTime),
+            endTime: new Date(appointment.endTime)
+          }));
+          
+          console.log('Processed appointments with Date objects:', processedAppointments);
+          
+          // Debug: Check if any appointments match today's date
+          const today = new Date();
+          const todayString = today.toISOString().split('T')[0];
+          const selectedDateString = selectedDate.toISOString().split('T')[0];
+          
+          console.log(`Today's date: ${todayString}`);
+          console.log(`Selected date: ${selectedDateString}`);
+          
+          // Log appointments that should match today's date
+          if (todayString === selectedDateString) {
+            const todaysAppointments = processedAppointments.filter(apt => {
+              const aptDate = new Date(apt.startTime).toISOString().split('T')[0];
+              console.log(`Appointment date: ${aptDate}, matches today: ${aptDate === todayString}`);
+              return aptDate === todayString;
+            });
+            console.log(`Found ${todaysAppointments.length} appointments for today`);
+          }
+          
+          return processedAppointments;
+        }
+        
+        console.warn('Appointments API did not return an array:', appointmentsData);
+        return [];
+      } catch (error) {
+        console.error('Error fetching appointments:', error);
+        toast({
+          title: "Error Fetching Appointments",
+          description: error instanceof Error ? error.message : "Could not load appointments.",
+          variant: "destructive",
+        });
+        return [];
+      }
     },
-    // Refetch every 30 seconds to keep data fresh
-    refetchInterval: 30000,
   });
   // Fetch doctors for dropdowns
   const { data: doctors = [] } = useQuery<Doctor[]>({
     queryKey: ['doctors'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/doctors');
-      return response.json();
+      try {
+        const response = await apiRequest('GET', '/api/doctors');
+        // Check if response needs parsing (assuming apiRequest returns Response object)
+        if (response && typeof response.json === 'function') {
+          const data = await response.json();
+          console.log('Fetched doctors:', data);
+          return Array.isArray(data) ? data : [];
+        }
+        // If apiRequest already returns parsed data
+        console.log('Fetched doctors (pre-parsed):', response);
+        return Array.isArray(response) ? response : [];
+      } catch (error) {
+        console.error("Error fetching doctors:", error);
+        toast({
+          title: "Error Fetching Doctors",
+          description: error instanceof Error ? error.message : "Could not load doctors.",
+          variant: "destructive",
+        });
+        return [];
+      }
     },
   });
   // Fetch services for dropdowns
   const { data: services = [] } = useQuery<Service[]>({
     queryKey: ['services'],
     queryFn: async () => {
-      const response = await apiRequest('GET', '/api/services');
-      return response.json();
+       try {
+        const response = await apiRequest('GET', '/api/services');
+         // Check if response needs parsing
+        if (response && typeof response.json === 'function') {
+          const data = await response.json();
+          console.log('Fetched services:', data);
+          return Array.isArray(data) ? data : [];
+        }
+        // If apiRequest already returns parsed data
+        console.log('Fetched services (pre-parsed):', response);
+        return Array.isArray(response) ? response : [];
+      } catch (error) {
+        console.error("Error fetching services:", error);
+        toast({
+          title: "Error Fetching Services",
+          description: error instanceof Error ? error.message : "Could not load services.",
+          variant: "destructive",
+        });
+        return [];
+      }
     },
   });
   // Fetch revenue data
@@ -216,19 +409,55 @@ export default function SchedulingAndRevenue() {
   } = useQuery<Revenue>({
     queryKey: ['revenue'],
     queryFn: async () => {
+      // Assuming this was correct and apiRequest returns Response needing .json()
       const response = await apiRequest('GET', '/api/revenue');
-      return response.json();
+      if (response && typeof response.json === 'function') {
+         return response.json();
+      }
+      // Handle case where it might already be parsed (less likely based on .json() usage)
+      return response;
     },
     refetchInterval: 60000, // Refetch every minute
   });
-  // Filter appointments for the selected date
-  const filteredAppointments = Array.isArray(appointments) 
-    ? appointments.filter((appointment: any) => {
-        if (!appointment.startTime) return false;
-        const appointmentDate = new Date(appointment.startTime);
-        return isSameDay(appointmentDate, selectedDate);
-      })
-    : [];
+  // Add this after the appointments query to debug date comparison issues
+  useEffect(() => {
+    // Log detailed debugging information
+    console.log('Current selected date:', selectedDate);
+    console.log('Selected date as ISO string:', selectedDate.toISOString());
+    console.log('Selected date as YYYY-MM-DD:', selectedDate.toISOString().split('T')[0]);
+    
+    if (Array.isArray(appointments)) {
+      console.log(`Fetched ${appointments.length} appointments:`, appointments);
+      
+      // Verify appointment date formatting
+      appointments.forEach((apt, index) => {
+        const aptStartDate = new Date(apt.startTime);
+        const aptDateString = aptStartDate.toISOString().split('T')[0];
+        const selectedDateString = selectedDate.toISOString().split('T')[0];
+        
+        console.log(`Appointment #${index}:`, {
+          id: apt.id,
+          clientName: apt.clientName,
+          startTime: apt.startTime,
+          formattedStartDate: aptDateString,
+          matchesSelectedDate: aptDateString === selectedDateString
+        });
+      });
+      
+      // Check if the appointment filtering might be happening incorrectly
+      const manuallyFilteredAppointments = appointments.filter(apt => {
+        const aptDate = new Date(apt.startTime).toISOString().split('T')[0];
+        const selectedDateStr = selectedDate.toISOString().split('T')[0];
+        return aptDate === selectedDateStr;
+      });
+      
+      console.log(`Manually filtered appointments for selected date: ${manuallyFilteredAppointments.length}`);
+    } else {
+      console.warn('appointments is not an array:', appointments);
+    }
+  }, [appointments, selectedDate]);
+  // Modify this for safer checking
+  const hasAppointmentsForSelectedDate = Array.isArray(appointments) && appointments.length > 0;
   // Create a new appointment
   const createAppointmentMutation = useMutation({
     mutationFn: async (data: AppointmentFormValues) => {
@@ -258,8 +487,20 @@ export default function SchedulingAndRevenue() {
       }
     },
     onSuccess: (data) => {
-      console.log('Appointment created successfully:', JSON.stringify(data, null, 2));
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      console.log('Appointment created successfully:', data);
+      
+      // Get date string from the form data's startTime
+      const dateFromForm = createForm.getValues().startTime;
+      const dateString = dateFromForm.toISOString().split('T')[0];
+      
+      // Invalidate both specific date query and general appointments query
+      queryClient.invalidateQueries({ 
+        queryKey: ['appointments', dateString] 
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ['appointments'] 
+      });
+      
       toast({
         title: "Success",
         description: "Appointment created successfully",
@@ -302,8 +543,10 @@ export default function SchedulingAndRevenue() {
       setIsEditAppointmentOpen(false);
       setSelectedAppointment(null);
       
-      // Refetch appointments to update the UI
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      // Update this line to invalidate the correct query
+      queryClient.invalidateQueries({ 
+        queryKey: ['appointments', selectedDate.toISOString().split('T')[0]] 
+      });
       
       toast({
         title: "Appointment updated",
@@ -325,12 +568,12 @@ export default function SchedulingAndRevenue() {
       return await apiRequest('POST', `/api/appointments/${appointmentId}/cancel`);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ 
+        queryKey: ['appointments', selectedDate.toISOString().split('T')[0]] 
+      });
       // Close the alert dialog
       setIsDeleteAlertOpen(false);
       setAppointmentToCancel(null);
-      
-      // Refetch appointments to update the UI
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
       
       toast({
         title: "Appointment cancelled",
@@ -352,8 +595,9 @@ export default function SchedulingAndRevenue() {
       return await apiRequest('POST', `/api/appointments/${appointmentId}/complete`);
     },
     onSuccess: () => {
-      // Refetch appointments and revenue to update the UI
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ 
+        queryKey: ['appointments', selectedDate.toISOString().split('T')[0]] 
+      });
       queryClient.invalidateQueries({ queryKey: ['revenue'] });
       
       toast({
@@ -439,18 +683,28 @@ export default function SchedulingAndRevenue() {
     setSelectedDate(new Date());
   };
   // Service helper functions
-  const getServiceName = (serviceId: number) => {
+  const getServiceName = (serviceId: number): string => {
+    // Ensure services is an array before finding
+    if (!Array.isArray(services)) {
+      console.warn('Services data is not an array:', services);
+      return `Service ID: ${serviceId}`;
+    }
     const service = services.find((s) => s.id === serviceId);
-    return service?.name || 'Unknown Service';
+    return service?.name || `Service ID: ${serviceId}`;
   };
   const getServicePrice = (serviceId: number) => {
     const service = services.find((s) => s.id === serviceId);
     return service?.price || 0;
   };
   // Doctor helper functions
-  const getDoctorName = (doctorId: number) => {
+  const getDoctorName = (doctorId: number): string => {
+     // Ensure doctors is an array before finding
+    if (!Array.isArray(doctors)) {
+      console.warn('Doctors data is not an array:', doctors);
+      return `Doctor ID: ${doctorId}`;
+    }
     const doctor = doctors.find((d) => d.id === doctorId);
-    return doctor ? `${doctor.firstName} ${doctor.lastName}` : 'Unknown Doctor';
+    return doctor ? `${doctor.firstName} ${doctor.lastName}` : `Doctor ID: ${doctorId}`;
   };
 
   // Calculate daily revenue
@@ -473,6 +727,63 @@ export default function SchedulingAndRevenue() {
     if (!revenue || !revenue.monthly) return formatCurrency(0);
     return formatCurrency(revenue.monthly);
   };
+
+  // Fix the refresh functionality
+  const handleRefresh = () => {
+    console.log('Manually refreshing appointments...');
+    const dateString = selectedDate.toISOString().split('T')[0];
+    console.log(`Invalidating query for date: ${dateString}`);
+    
+    // Properly invalidate the query with the current date key
+    queryClient.invalidateQueries({ 
+      queryKey: ['appointments', dateString] 
+    });
+    
+    // Then refetch
+    refetchAppointments();
+  };
+
+  // Sorting function
+  const handleRequestSort = (property: keyof Appointment) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  // Handle row selection
+  const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      const newSelected = appointments.map((n) => n.id);
+      setSelected(newSelected);
+      return;
+    }
+    setSelected([]);
+  };
+
+  // Handle page change
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  // Handle rows per page change
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Sort appointments
+  const sortedAppointments = [...appointments].sort((a, b) => {
+    if (a[orderBy] == null || b[orderBy] == null) {
+      return 0; // Handle potential null values
+    }
+    if (order === 'asc') {
+      return a[orderBy] < b[orderBy] ? -1 : 1;
+    }
+    return a[orderBy] > b[orderBy] ? -1 : 1;
+  });
+
+  // Paginate appointments
+  const paginatedAppointments = sortedAppointments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <div className="space-y-6">
@@ -511,7 +822,7 @@ export default function SchedulingAndRevenue() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refetchAppointments()}
+            onClick={handleRefresh}
             className="ml-4"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -538,124 +849,15 @@ export default function SchedulingAndRevenue() {
           </div>
 
           {isLoadingAppointments ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : filteredAppointments.length === 0 ? (
-            <Card>
-              <CardContent className="py-10">
-                <div className="text-center text-muted-foreground">
-                  <p>No appointments scheduled for this day.</p>
-                  <Button
-                    variant="outline"
-                    className="mt-4"
-                    onClick={handleNewAppointment}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Schedule Appointment
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           ) : (
-            <div className="grid gap-4">
-              {filteredAppointments
-                .sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-                .map((appointment: any) => (
-                  <Card key={appointment.id} className={appointment.status === 'CANCELLED' ? 'opacity-60' : ''}>
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle>{appointment.clientName}</CardTitle>
-                          <CardDescription>{appointment.clientEmail}</CardDescription>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={getStatusBadgeVariant(appointment.status) as "default" | "destructive" | "secondary" | "outline"}>{appointment.status}</Badge>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-48" align="end">
-                              <div className="grid gap-1">
-                                {appointment.status === 'SCHEDULED' && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      className="flex items-center justify-start"
-                                      onClick={() => handleEditAppointment(appointment)}
-                                    >
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Edit
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      className="flex items-center justify-start"
-                                      onClick={() => handleCompleteAppointment(appointment.id)}
-                                    >
-                                      <Check className="h-4 w-4 mr-2" />
-                                      Mark Completed
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      className="flex items-center justify-start text-destructive"
-                                      onClick={() => handleCancelAppointment(appointment)}
-                                    >
-                                      <Ban className="h-4 w-4 mr-2" />
-                                      Cancel
-                                    </Button>
-                                  </>
-                                )}
-                                {appointment.status === 'COMPLETED' && (
-                                  <Button
-                                    variant="ghost"
-                                    className="flex items-center justify-start"
-                                    onClick={() => handleEditAppointment(appointment)}
-                                  >
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    View Details
-                                  </Button>
-                                )}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pb-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center text-sm">
-                            <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
-                            {formatAppointmentTime(appointment.startTime)}
-                          </div>
-                          <div className="flex items-center text-sm">
-                            <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                            {getDoctorName(appointment.doctorId)}
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center text-sm">
-                            <CreditCard className="h-4 w-4 mr-2 text-muted-foreground" />
-                            {getServiceName(appointment.serviceId)}
-                          </div>
-                          <div className="flex items-center text-sm">
-                            <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
-                            {formatCurrency(getServicePrice(appointment.serviceId))}
-                          </div>
-                        </div>
-                      </div>
-                      {appointment.notes && (
-                        <div className="mt-2 text-sm text-muted-foreground">
-                          <p className="font-medium">Notes:</p>
-                          <p>{appointment.notes}</p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-            </div>
+            <AppointmentTable
+              appointments={appointments}
+              getDoctorName={getDoctorName}
+              getServiceName={getServiceName}
+            />
           )}
         </TabsContent>
 
@@ -794,7 +996,8 @@ export default function SchedulingAndRevenue() {
                       <FormLabel>Doctor</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value?.toString()}
+                        // Ensure defaultValue is a string or undefined
+                        defaultValue={field.value ? String(field.value) : undefined}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -802,11 +1005,16 @@ export default function SchedulingAndRevenue() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {Array.isArray(doctors) && doctors.map((doctor: any) => (
-                            <SelectItem key={doctor.id} value={doctor.id.toString()}>
-                              {`${doctor.firstName} ${doctor.lastName}`}
-                            </SelectItem>
-                          ))}
+                          {/* Add check to ensure doctors is an array */}
+                          {Array.isArray(doctors) && doctors.length > 0 ? (
+                            doctors.map((doctor: Doctor) => ( // Use Doctor type
+                              <SelectItem key={doctor.id} value={String(doctor.id)}>
+                                {`${doctor.firstName} ${doctor.lastName}`}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="nodata" disabled>No doctors available</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -822,7 +1030,8 @@ export default function SchedulingAndRevenue() {
                       <FormLabel>Service</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value?.toString()}
+                         // Ensure defaultValue is a string or undefined
+                        defaultValue={field.value ? String(field.value) : undefined}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -830,11 +1039,16 @@ export default function SchedulingAndRevenue() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                        {Array.isArray(services) && services.map((service: any) => (
-                            <SelectItem key={service.id} value={service.id.toString()}>
+                         {/* Add check to ensure services is an array */}
+                        {Array.isArray(services) && services.length > 0 ? (
+                            services.map((service: Service) => ( // Use Service type
+                            <SelectItem key={service.id} value={String(service.id)}>
                               {`${service.name} (${formatCurrency(service.price)})`}
                             </SelectItem>
-                          ))}
+                          ))
+                         ) : (
+                            <SelectItem value="nodata" disabled>No services available</SelectItem>
+                         )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -975,8 +1189,8 @@ export default function SchedulingAndRevenue() {
                       <FormLabel>Doctor</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value?.toString()}
-                        value={field.value?.toString()}
+                        // Ensure value is a string or undefined
+                        value={field.value ? String(field.value) : undefined}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -984,11 +1198,16 @@ export default function SchedulingAndRevenue() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {Array.isArray(doctors) && doctors.map((doctor: any) => (
-                            <SelectItem key={doctor.id} value={doctor.id.toString()}>
-                              {`${doctor.firstName} ${doctor.lastName}`}
-                            </SelectItem>
-                          ))}
+                           {/* Add check to ensure doctors is an array */}
+                          {Array.isArray(doctors) && doctors.length > 0 ? (
+                            doctors.map((doctor: Doctor) => ( // Use Doctor type
+                              <SelectItem key={doctor.id} value={String(doctor.id)}>
+                                {`${doctor.firstName} ${doctor.lastName}`}
+                              </SelectItem>
+                            ))
+                          ) : (
+                             <SelectItem value="nodata" disabled>No doctors available</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -1004,8 +1223,8 @@ export default function SchedulingAndRevenue() {
                       <FormLabel>Service</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value?.toString()}
-                        value={field.value?.toString()}
+                        // Ensure value is a string or undefined
+                        value={field.value ? String(field.value) : undefined}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -1013,11 +1232,16 @@ export default function SchedulingAndRevenue() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {Array.isArray(services) && services.map((service: any) => (
-                            <SelectItem key={service.id} value={service.id.toString()}>
-                              {`${service.name} (${formatCurrency(service.price)})`}
-                            </SelectItem>
-                          ))}
+                          {/* Add check to ensure services is an array */}
+                          {Array.isArray(services) && services.length > 0 ? (
+                            services.map((service: Service) => ( // Use Service type
+                              <SelectItem key={service.id} value={String(service.id)}>
+                                {`${service.name} (${formatCurrency(service.price)})`}
+                              </SelectItem>
+                            ))
+                          ) : (
+                             <SelectItem value="nodata" disabled>No services available</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
