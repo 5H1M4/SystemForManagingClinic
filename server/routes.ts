@@ -86,24 +86,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   
   // Service routes
-  app.post("/api/services", async (req, res) => {
-    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
-      return res.sendStatus(403);
+  // Service Routes
+
+// POST /api/services - Create a new service
+app.post("/api/services", async (req, res) => {
+  if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
+    return res.sendStatus(403);
+  }
+
+  // Validate request body with Drizzle's Zod schema
+  const parsed = insertServiceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    console.error("Zod validation errors:", parsed.error);
+    return res.status(400).json(parsed.error);
+  }
+
+  // IMPORTANT: Convert the incoming price to a number, not a string
+  const serviceData = {
+    ...parsed.data,
+    price: Number(parsed.data.price),       // Drizzle expects a numeric price
+    duration: Number(parsed.data.duration), // Keep duration as number if needed
+    clinicId: req.user.clinicId,
+  };
+
+  try {
+    if (!serviceData.clinicId) {
+      throw new Error("Clinic ID is null");
     }
+    const service = await storage.createService(serviceData);
+    return res.status(201).json(service);
+  } catch (error) {
+    console.error("Error creating service:", error);
+    return res.status(500).json({ message: "Failed to create service" });
+  }
+});
 
-    const parsed = insertServiceSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(parsed.error);
+// GET /api/clinics/:clinicId/services - List services for a clinic
+app.get("/api/clinics/:clinicId/services", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.sendStatus(401);
+  }
 
-    const service = await storage.createService(parsed.data);
-    res.status(201).json(service);
-  });
+  const services = await storage.listServicesByClinic(Number(req.params.clinicId));
 
-  app.get("/api/clinics/:clinicId/services", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
-    const services = await storage.listServicesByClinic(Number(req.params.clinicId));
-    res.json(services);
-  });
+  // Convert the stored price to a number for the client response
+  const formattedServices = services.map(service => ({
+    ...service,
+    price: Number(service.price),
+  }));
+
+  return res.json(formattedServices);
+});
+
+  
 
   // Appointment routes
   app.post("/api/appointments", async (req, res) => {

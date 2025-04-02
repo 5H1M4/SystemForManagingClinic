@@ -256,7 +256,14 @@ export default function ServicesManagement() {
                       <FormItem>
                         <FormLabel>Price ($)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" min="0.01" placeholder="0.00" {...field} />
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            min="0.01" 
+                            placeholder="0.00" 
+                            {...field} 
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -269,7 +276,13 @@ export default function ServicesManagement() {
                       <FormItem>
                         <FormLabel>Duration (minutes)</FormLabel>
                         <FormControl>
-                          <Input type="number" min="1" placeholder="30" {...field} />
+                          <Input 
+                            type="number" 
+                            min="1" 
+                            placeholder="30" 
+                            {...field} 
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -393,7 +406,14 @@ export default function ServicesManagement() {
                       <FormItem>
                         <FormLabel>Price ($)</FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" min="0.01" placeholder="0.00" {...field} />
+                          <Input 
+                            type="number" 
+                            step="0.01" 
+                            min="0.01" 
+                            placeholder="0.00" 
+                            {...field} 
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -406,7 +426,13 @@ export default function ServicesManagement() {
                       <FormItem>
                         <FormLabel>Duration (minutes)</FormLabel>
                         <FormControl>
-                          <Input type="number" min="1" placeholder="30" {...field} />
+                          <Input 
+                            type="number" 
+                            min="1" 
+                            placeholder="30" 
+                            {...field} 
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
