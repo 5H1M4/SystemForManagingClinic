@@ -34,7 +34,8 @@ export const services = pgTable("services", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  price: decimal("price", { precision: 10, scale: 2 })
+    .notNull(),
   duration: integer("duration").notNull(), // in minutes
   clinicId: integer("clinic_id").references(() => clinics.id).notNull()
 });
@@ -75,7 +76,13 @@ export const insertUserSchema = createInsertSchema(users).pick({
 });
 
 export const insertClinicSchema = createInsertSchema(clinics);
-export const insertServiceSchema = createInsertSchema(services);
+export const insertServiceSchema = z.object({
+  name: z.string().min(1, "Service name is required"),
+  description: z.string().optional(),
+  price: z.number().positive("Price must be positive").min(0.01, "Price must be at least 0.01"),
+  duration: z.number().int().positive("Duration must be a positive number"),
+  clinicId: z.number().positive("Clinic ID is required")
+});
 export const insertAppointmentSchema = createInsertSchema(appointments)
   .omit({ endTime: true })
   .extend({

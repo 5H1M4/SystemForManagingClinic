@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import { Loader2, Pencil, Trash2, Plus, Mail, Phone, User, Check } from 'lucide-react';
+import { Loader2, Pencil, Trash2, Plus, Mail, Phone } from 'lucide-react';
 
 // UI Components
 import {
@@ -46,7 +46,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 // Define the doctor schema using Zod for form validation
@@ -108,21 +107,43 @@ export default function DoctorManagement() {
     },
   });
 
-  // Fetch doctors for this clinic
+  /**
+   * Helper function to safely parse JSON responses.
+   * If the response is empty or not JSON, returns null instead of throwing an error.
+   */
+  async function parseJsonSafe(response: Response) {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    try {
+      return await response.json();
+    } catch {
+      // If there's no JSON (e.g., 204 No Content), return null or an empty object
+      return null;
+    }
+  }
+
+  // ----- GET: Fetch doctors for this clinic -----
   const { data: doctors = [], isLoading } = useQuery({
     queryKey: ['doctors'],
     queryFn: async () => {
       const response = await apiRequest('GET', '/api/doctors');
-      return response;
+      const data = await parseJsonSafe(response);
+      // If data is null or not an array, you might want to return [] or throw an error
+      if (!data || !Array.isArray(data)) {
+        return [];
+      }
+      return data;
     },
     // Refresh data every minute to see new doctors or changes
     refetchInterval: 60000,
   });
 
-  // Create a new doctor
+  // ----- POST: Create a new doctor -----
   const createDoctorMutation = useMutation({
-    mutationFn: async (data: DoctorFormValues) => {
-      return await apiRequest('POST', '/api/doctors', data);
+    mutationFn: async (formData: DoctorFormValues) => {
+      const response = await apiRequest('POST', '/api/doctors', formData);
+      return parseJsonSafe(response);
     },
     onSuccess: () => {
       // Reset form and close dialog
@@ -149,11 +170,12 @@ export default function DoctorManagement() {
     },
   });
 
-  // Update an existing doctor
+  // ----- PUT: Update an existing doctor -----
   const updateDoctorMutation = useMutation({
-    mutationFn: async (data: DoctorFormValues) => {
-      const { id, ...updateData } = data;
-      return await apiRequest('PUT', `/api/doctors/${id}`, updateData);
+    mutationFn: async (formData: DoctorFormValues) => {
+      const { id, ...updateData } = formData;
+      const response = await apiRequest('PUT', `/api/doctors/${id}`, updateData);
+      return parseJsonSafe(response);
     },
     onSuccess: () => {
       // Reset form and close dialog
@@ -181,10 +203,12 @@ export default function DoctorManagement() {
     },
   });
 
-  // Delete a doctor
+  // ----- DELETE: Delete a doctor -----
   const deleteDoctorMutation = useMutation({
     mutationFn: async (doctorId: number) => {
-      return await apiRequest('DELETE', `/api/doctors/${doctorId}`);
+      const response = await apiRequest('DELETE', `/api/doctors/${doctorId}`);
+      // Safely parse the response. If it's 204, parseJsonSafe returns null without error.
+      return parseJsonSafe(response);
     },
     onSuccess: () => {
       // Close confirmation dialog
@@ -249,6 +273,7 @@ export default function DoctorManagement() {
     }
   };
 
+  // Render
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -258,6 +283,8 @@ export default function DoctorManagement() {
             Create, view, edit, and manage doctor accounts for your clinic.
           </CardDescription>
         </div>
+
+        {/* Create Doctor Dialog */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -358,7 +385,9 @@ export default function DoctorManagement() {
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={createDoctorMutation.isPending}>
-                    {createDoctorMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {createDoctorMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Create Doctor
                   </Button>
                 </DialogFooter>
@@ -426,10 +455,10 @@ export default function DoctorManagement() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="password" 
-                          placeholder="Leave blank to keep current password" 
-                          {...field} 
+                        <Input
+                          type="password"
+                          placeholder="Leave blank to keep current password"
+                          {...field}
                         />
                       </FormControl>
                       <FormDescription>
@@ -469,7 +498,9 @@ export default function DoctorManagement() {
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={updateDoctorMutation.isPending}>
-                    {updateDoctorMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {updateDoctorMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Update Doctor
                   </Button>
                 </DialogFooter>
@@ -478,6 +509,7 @@ export default function DoctorManagement() {
           </DialogContent>
         </Dialog>
       </CardHeader>
+
       <CardContent>
         {isLoading ? (
           <div className="flex justify-center py-8">

@@ -3,8 +3,9 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertClinicSchema, insertServiceSchema, insertAppointmentSchema, insertPaymentSchema } from "@shared/schema";
-import { hashPassword } from "./utils"; // Fix: Ensure the utils module is correctly imported or available
+import { hashPassword, comparePasswords } from "./utils"; // Fix: Ensure the utils module is correctly imported or available
 import { pool } from "./db";
+
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
@@ -90,36 +91,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 // POST /api/services - Create a new service
 app.post("/api/services", async (req, res) => {
+  console.log("Creating service - Request body:", req.body);
+  
   if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
     return res.sendStatus(403);
   }
 
-  // Validate request body with Drizzle's Zod schema
-  const parsed = insertServiceSchema.safeParse(req.body);
-  if (!parsed.success) {
-    console.error("Zod validation errors:", parsed.error);
-    return res.status(400).json(parsed.error);
+  // Ensure clinicId is available
+  if (!req.user.clinicId) {
+    return res.status(400).json({ error: "Clinic ID is required" });
   }
 
-  // IMPORTANT: Convert the incoming price to a number, not a string
-  const serviceData = {
-    ...parsed.data,
-    price: Number(parsed.data.price),       // Drizzle expects a numeric price
-    duration: Number(parsed.data.duration), // Keep duration as number if needed
-    clinicId: req.user.clinicId,
-  };
-
   try {
-    if (!serviceData.clinicId) {
-      throw new Error("Clinic ID is null");
+    // Prepare the data with the correct types
+    const serviceData = {
+      ...req.body,
+      clinicId: req.user.clinicId,
+      price: Number(req.body.price), // Ensure price is a number
+      duration: Number(req.body.duration), // Ensure duration is a number
+    };
+
+    console.log("Formatted service data:", serviceData);
+
+    // Validate with schema
+    const parsed = insertServiceSchema.safeParse(serviceData);
+    if (!parsed.success) {
+      console.error("Validation errors:", parsed.error);
+      return res.status(400).json(parsed.error);
     }
-    const service = await storage.createService(serviceData);
+
+    const service = await storage.createService(parsed.data);
+    console.log("Service created successfully:", service);
     return res.status(201).json(service);
   } catch (error) {
     console.error("Error creating service:", error);
     return res.status(500).json({ message: "Failed to create service" });
   }
 });
+
 
 // GET /api/clinics/:clinicId/services - List services for a clinic
 app.get("/api/clinics/:clinicId/services", async (req, res) => {
@@ -508,8 +517,13 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
       return res.sendStatus(403);
     }
     try {
+      // Hash the password coming from the request body.
+      const hashedPassword = await hashPassword(req.body.password);
+  
+      // Pass the hashed password instead of the plain text one.
       const doctor = await storage.createDoctor({
         ...req.body,
+        password: hashedPassword,
         clinicId: req.user.clinicId,
         role: "DOCTOR"
       });
@@ -519,19 +533,29 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
       res.status(500).json({ error: "Failed to create doctor" });
     }
   });
+  
 
   app.put('/api/doctors/:doctorId', async (req, res) => {
     if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
-      return res.sendStatus(403);
+        return res.sendStatus(403);
     }
+
     try {
-      const doctor = await storage.updateDoctor(Number(req.params.doctorId), req.body);
-      res.json(doctor);
+        const { password, ...otherFields } = req.body; // ✅ Separate password field
+        let updatedFields = { ...otherFields };
+
+        if (password) {
+            console.log("Hashing new password before updating doctor.");
+            updatedFields.password = await hashPassword(password); // ✅ Hash only if password is provided
+        }
+
+        const doctor = await storage.updateDoctor(Number(req.params.doctorId), updatedFields);
+        res.json(doctor);
     } catch (error) {
-      console.error('Error updating doctor:', error);
-      res.status(500).json({ error: "Failed to update doctor" });
+        console.error("Error updating doctor:", error);
+        res.status(500).json({ error: "Failed to update doctor" });
     }
-  });
+});
 
   app.delete('/api/doctors/:doctorId', async (req, res) => {
     if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
