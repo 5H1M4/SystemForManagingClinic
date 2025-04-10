@@ -621,13 +621,158 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
   });
 
   app.post('/api/appointments/:appointmentId/cancel', async (req, res) => {
-    if (!req.isAuthenticated() || req.user.role !== "CLINIC_ADMIN") {
-      return res.sendStatus(403);
-    }
     try {
-      await storage.cancelAppointment(Number(req.params.appointmentId));
-      res.sendStatus(204);
+      const { appointmentId } = req.params;
+      const user = req.user;
+
+      console.log(`Cancel request for appointment ${appointmentId} by user ${user?.id} (${user?.role})`);
+
+      if (!user) {
+        console.log('Cancel failed: User not authenticated');
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Allow both clinic admins and doctors to cancel appointments
+      if (user.role !== 'CLINIC_ADMIN' && user.role !== 'DOCTOR') {
+        console.log(`Cancel failed: User role ${user.role} not authorized`);
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      // Check if appointmentId is a valid number
+      const appointmentIdNum = parseInt(appointmentId);
+      if (isNaN(appointmentIdNum)) {
+        console.log(`Cancel failed: Invalid appointment ID format: ${appointmentId}`);
+        return res.status(400).json({ error: 'Invalid appointment ID' });
+      }
+
+      const appointment = await storage.getAppointment(appointmentIdNum);
+      console.log(`Appointment found: ${appointment ? 'Yes' : 'No'}`);
+      
+      if (!appointment) {
+        console.log(`Cancel failed: Appointment ${appointmentId} not found`);
+        return res.status(404).json({ error: 'Appointment not found' });
+      }
+
+      console.log(`Appointment details: doctorId=${appointment.doctorId}, clinicId=${appointment.clinicId}, status=${appointment.status}`);
+      console.log(`User details: id=${user.id}, clinicId=${user.clinicId}, role=${user.role}`);
+
+      // For doctors, only allow cancelling their own appointments
+      const appointmentDoctorId = typeof appointment.doctorId === 'string' 
+        ? parseInt(appointment.doctorId) 
+        : appointment.doctorId;
+        
+      const userId = typeof user.id === 'string' 
+        ? parseInt(user.id) 
+        : user.id;
+        
+      if (user.role === 'DOCTOR' && appointmentDoctorId !== userId) {
+        console.log(`Cancel failed: Doctor ID mismatch. Appointment doctorId=${appointmentDoctorId}, user.id=${userId}`);
+        return res.status(403).json({ error: 'You can only cancel your own appointments' });
+      }
+
+      // For clinic admins, only allow cancelling appointments in their clinic
+      const appointmentClinicId = typeof appointment.clinicId === 'string' 
+        ? parseInt(appointment.clinicId) 
+        : appointment.clinicId;
+        
+      const userClinicId = typeof user.clinicId === 'string' 
+        ? parseInt(user.clinicId) 
+        : user.clinicId;
+        
+      if (user.role === 'CLINIC_ADMIN' && appointmentClinicId !== userClinicId) {
+        console.log(`Cancel failed: Clinic ID mismatch. Appointment clinicId=${appointmentClinicId}, user.clinicId=${userClinicId}`);
+        return res.status(403).json({ error: 'You can only cancel appointments in your clinic' });
+      }
+
+      // Verify appointment is in SCHEDULED status
+      if (appointment.status !== 'SCHEDULED') {
+        console.log(`Cancel failed: Appointment status is ${appointment.status}, not SCHEDULED`);
+        return res.status(400).json({ error: 'Only scheduled appointments can be cancelled' });
+      }
+
+      console.log(`Proceeding with cancellation of appointment ${appointmentId}`);
+      const updatedAppointment = await storage.cancelAppointment(appointmentIdNum);
+      console.log(`Appointment ${appointmentId} cancelled successfully`);
+      res.json(updatedAppointment);
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  app.post('/api/appointments/:appointmentId/complete', async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        console.log('Complete failed: User not authenticated');
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      if (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN") {
+        console.log(`Complete failed: User role ${req.user.role} not authorized`);
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      const appointmentId = Number(req.params.appointmentId);
+      console.log(`Complete request for appointment ${appointmentId} by user ${req.user.id} (${req.user.role})`);
+      
+      if (isNaN(appointmentId)) {
+        console.log(`Complete failed: Invalid appointment ID format: ${req.params.appointmentId}`);
+        return res.status(400).json({ error: 'Invalid appointment ID' });
+      }
+      
+      // Get the appointment to check permissions
+      const appointment = await storage.getAppointment(appointmentId);
+      console.log(`Appointment found: ${appointment ? 'Yes' : 'No'}`);
+      
+      if (!appointment) {
+        console.log(`Complete failed: Appointment ${appointmentId} not found`);
+        return res.status(404).json({ error: "Appointment not found" });
+      }
+      
+      console.log(`Appointment details: doctorId=${appointment.doctorId}, clinicId=${appointment.clinicId}, status=${appointment.status}`);
+      console.log(`User details: id=${req.user.id}, clinicId=${req.user.clinicId}, role=${req.user.role}`);
+      
+      // Verify doctor is authorized to complete this appointment
+      const appointmentDoctorId = typeof appointment.doctorId === 'string' 
+        ? parseInt(appointment.doctorId) 
+        : appointment.doctorId;
+        
+      const userId = typeof req.user.id === 'string' 
+        ? parseInt(req.user.id) 
+        : req.user.id;
+        
+      if (req.user.role === "DOCTOR" && appointmentDoctorId !== userId) {
+        console.log(`Complete failed: Doctor ID mismatch. Appointment doctorId=${appointmentDoctorId}, user.id=${userId}`);
+        return res.status(403).json({ error: "You are not authorized to complete this appointment" });
+      }
+      
+      // For clinic admins, verify they belong to the same clinic
+      const appointmentClinicId = typeof appointment.clinicId === 'string' 
+        ? parseInt(appointment.clinicId) 
+        : appointment.clinicId;
+        
+      const userClinicId = typeof req.user.clinicId === 'string' 
+        ? parseInt(req.user.clinicId) 
+        : req.user.clinicId;
+        
+      if (req.user.role === "CLINIC_ADMIN" && appointmentClinicId !== userClinicId) {
+        console.log(`Complete failed: Clinic ID mismatch. Appointment clinicId=${appointmentClinicId}, user.clinicId=${userClinicId}`);
+        return res.status(403).json({ error: "You are not authorized to complete this appointment" });
+      }
+      
+      // Verify appointment is in SCHEDULED status
+      if (appointment.status !== "SCHEDULED") {
+        console.log(`Complete failed: Appointment status is ${appointment.status}, not SCHEDULED`);
+        return res.status(400).json({ error: "Only scheduled appointments can be completed" });
+      }
+      
+      // All checks passed, proceed with completion
+      console.log(`Proceeding with completion of appointment ${appointmentId}`);
+      const completedAppointment = await storage.completeAppointment(appointmentId);
+      console.log(`Appointment ${appointmentId} completed successfully`);
+      res.json(completedAppointment);
     } catch (error: any) {
+      console.error("Error completing appointment:", error);
       res.status(400).json({ error: error.message });
     }
   });
@@ -661,27 +806,6 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
       
       const updatedAppointment = await storage.updateAppointment(appointmentId, req.body);
       res.json(updatedAppointment);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  app.post('/api/appointments/:appointmentId/complete', async (req, res) => {
-    if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {
-      return res.sendStatus(403);
-    }
-    
-    try {
-      const appointmentId = Number(req.params.appointmentId);
-      
-      // Verify that the appointment belongs to the user's clinic
-      const appointment = await storage.getAppointment(appointmentId);
-      if (!appointment || appointment.clinicId !== req.user.clinicId) {
-        return res.status(404).json({ error: "Appointment not found" });
-      }
-      
-      const completedAppointment = await storage.completeAppointment(appointmentId);
-      res.json(completedAppointment);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

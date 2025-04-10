@@ -7,12 +7,13 @@ import { CalendarView } from "@/components/appointments/calendar-view";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
 
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch appointments with refetch disabled on mount & window focus for development.
+  // Fetch appointments query. Refetch on mount and window focus are disabled.
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: [`/api/doctors/${user?.id}/appointments`],
     enabled: !!user?.id,
@@ -20,32 +21,85 @@ export default function DoctorDashboard() {
     refetchOnWindowFocus: false,
   });
 
-  // Mutation to update appointment status.
-  const updateAppointmentMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      return await apiRequest("PUT", `/api/appointments/${id}`, { status });
+  // Dedicated mutation for completing an appointment.
+  const completeAppointmentMutation = useMutation({
+    mutationFn: async (id: number) => {
+      console.log(`Attempting to complete appointment ${id}`);
+      const response = await apiRequest("POST", `/api/appointments/${id}/complete`);
+      return response;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: [`/api/doctors/${user?.id}/appointments`],
-      });
+    onSuccess: (_, appointmentId) => {
+      console.log(`Appointment ${appointmentId} completed successfully`);
+      // Invalidate the specific query key for this doctor's appointments
+      queryClient.invalidateQueries({ queryKey: [`/api/doctors/${user?.id}/appointments`] });
       toast({
-        title: "Appointment Updated",
-        description: "The appointment status has been updated.",
+        title: "Appointment Completed",
+        description: "The appointment has been marked as completed.",
       });
     },
     onError: (error: any) => {
+      console.error(`Error completing appointment:`, error);
+      let errorMessage = "Could not complete the appointment. Please try again.";
+      
+      if (error.status === 404) {
+        errorMessage = "Appointment not found. It may have been deleted.";
+      } else if (error.status === 403) {
+        errorMessage = "You don't have permission to complete this appointment.";
+      } else if (error.status === 400) {
+        errorMessage = error.message || "Only scheduled appointments can be completed.";
+      }
+      
       toast({
         title: "Update Failed",
-        description: error.message || "Could not update the appointment.",
+        description: errorMessage,
         variant: "destructive",
       });
     },
   });
 
-  // Update appointment status convenience method.
+  // Dedicated mutation for cancelling an appointment.
+  const cancelAppointmentMutation = useMutation({
+    mutationFn: async (id: number) => {
+      console.log(`Attempting to cancel appointment ${id}`);
+      const response = await apiRequest("POST", `/api/appointments/${id}/cancel`);
+      return response;
+    },
+    onSuccess: (_, appointmentId) => {
+      console.log(`Appointment ${appointmentId} cancelled successfully`);
+      // Invalidate the specific query key for this doctor's appointments
+      queryClient.invalidateQueries({ queryKey: [`/api/doctors/${user?.id}/appointments`] });
+      toast({
+        title: "Appointment Cancelled",
+        description: "The appointment has been cancelled.",
+      });
+    },
+    onError: (error: any) => {
+      console.error(`Error cancelling appointment:`, error);
+      let errorMessage = "Could not cancel the appointment. Please try again.";
+      
+      if (error.status === 404) {
+        errorMessage = "Appointment not found. It may have been deleted.";
+      } else if (error.status === 403) {
+        errorMessage = "You don't have permission to cancel this appointment.";
+      } else if (error.status === 400) {
+        errorMessage = error.message || "Only scheduled appointments can be cancelled.";
+      }
+      
+      toast({
+        title: "Update Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update function to call the appropriate endpoint based on the status.
   const updateAppointmentStatus = (id: number, status: string) => {
-    updateAppointmentMutation.mutate({ id, status });
+    if (status === "COMPLETED") {
+      completeAppointmentMutation.mutate(id);
+    } else if (status === "CANCELLED") {
+      cancelAppointmentMutation.mutate(id);
+    }
   };
 
   if (isLoading) {
@@ -169,6 +223,8 @@ export default function DoctorDashboard() {
                                 className={`px-2 py-1 text-xs rounded-full ${
                                   appointment.status === "COMPLETED"
                                     ? "bg-green-100 text-green-800"
+                                    : appointment.status === "CANCELLED"
+                                    ? "bg-red-100 text-red-800"
                                     : "bg-blue-100 text-blue-800"
                                 }`}
                               >
@@ -176,22 +232,38 @@ export default function DoctorDashboard() {
                               </span>
                             </td>
                             <td className="px-4 py-2 whitespace-nowrap text-right space-x-2">
-                              <button
-                                onClick={() =>
-                                  updateAppointmentStatus(appointment.id, "COMPLETED")
-                                }
-                                className="px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
-                              >
-                                Completed
-                              </button>
-                              <button
-                                onClick={() =>
-                                  updateAppointmentStatus(appointment.id, "CANCELED")
-                                }
-                                className="px-3 py-1 bg-red-600 text-white rounded-md text-xs hover:bg-red-700"
-                              >
-                                Canceled
-                              </button>
+                              {appointment.status === "SCHEDULED" ? (
+                                <>
+                                  <Button
+                                    onClick={() =>
+                                      updateAppointmentStatus(Number(appointment.id), "COMPLETED")
+                                    }
+                                    className="px-3 py-1 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                    disabled={completeAppointmentMutation.isPending || cancelAppointmentMutation.isPending}
+                                  >
+                                    {completeAppointmentMutation.isPending && appointment.id === completeAppointmentMutation.variables ? (
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    ) : null}
+                                    Complete
+                                  </Button>
+                                  <Button
+                                    onClick={() =>
+                                      updateAppointmentStatus(Number(appointment.id), "CANCELLED")
+                                    }
+                                    className="px-3 py-1 bg-red-600 text-white rounded-md text-xs hover:bg-red-700"
+                                    disabled={completeAppointmentMutation.isPending || cancelAppointmentMutation.isPending}
+                                  >
+                                    {cancelAppointmentMutation.isPending && appointment.id === cancelAppointmentMutation.variables ? (
+                                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    ) : null}
+                                    Cancel
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-gray-500 italic">
+                                  Appointment Closed
+                                </span>
+                              )}
                             </td>
                           </tr>
                         ))}

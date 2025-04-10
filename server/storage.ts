@@ -403,22 +403,20 @@ export class PostgresStorage implements IStorage {
 
   // Helper function to convert a DB row to the expected Appointment shape
   private convertAppointment(row: any): Appointment {
-    {/*console.log('Converting row to Appointment:', JSON.stringify(row, null, 2));*/}
     const appointment = {
-      id: row.id,
-      clientId: row.client_id,
-      doctorId: row.doctor_id,
-      serviceId: row.service_id,
+      id: Number(row.id),
+      clientId: Number(row.client_id),
+      doctorId: Number(row.doctor_id),
+      serviceId: Number(row.service_id),
       startTime: row.start_time,
       endTime: row.end_time,
       status: row.status,
-      clinicId: row.clinic_id,
+      clinicId: Number(row.clinic_id),
       notes: row.notes,
       clientName: row.client_name,
       clientEmail: row.client_email,
       clientPhone: row.client_phone
     };
-    {/*console.log('Converted appointment:', JSON.stringify(appointment, null, 2));*/}
     return appointment;
   }
 
@@ -719,8 +717,28 @@ export class PostgresStorage implements IStorage {
     await pool.query("DELETE FROM users WHERE id = $1", [doctorId]);
   }
 
-  async cancelAppointment(appointmentId: number): Promise<void> {
-    await pool.query("UPDATE appointments SET status = 'CANCELLED' WHERE id = $1", [appointmentId]);
+  async cancelAppointment(appointmentId: number): Promise<Appointment> {
+    console.log(`Storage: Cancelling appointment ${appointmentId}`);
+    try {
+      // Ensure appointmentId is treated as a number
+      const numAppointmentId = typeof appointmentId === 'string' 
+        ? parseInt(appointmentId) 
+        : appointmentId;
+        
+      const { rows } = await pool.query(
+        "UPDATE appointments SET status = 'CANCELLED' WHERE id = $1 RETURNING *",
+        [numAppointmentId]
+      );
+      console.log(`Update result: ${rows.length} rows affected`);
+      if (!rows.length) {
+        console.error(`No rows affected when cancelling appointment ${appointmentId}`);
+        throw new Error("Appointment not found or could not be cancelled");
+      }
+      return this.convertAppointment(rows[0]);
+    } catch (error) {
+      console.error(`Error in cancelAppointment for ID ${appointmentId}:`, error);
+      throw error; // Re-throw the error for the route to handle
+    }
   }
 
   async calculateRevenue(clinicId: number): Promise<any> {
@@ -771,19 +789,51 @@ export class PostgresStorage implements IStorage {
   
 
   async completeAppointment(appointmentId: number): Promise<Appointment> {
-    const { rows } = await pool.query(
-      "UPDATE appointments SET status = 'COMPLETED' WHERE id = $1 RETURNING *",
-      [appointmentId]
-    );
-    return rows[0];
+    console.log(`Storage: Completing appointment ${appointmentId}`);
+    try {
+      // Ensure appointmentId is treated as a number
+      const numAppointmentId = typeof appointmentId === 'string' 
+        ? parseInt(appointmentId) 
+        : appointmentId;
+        
+      const { rows } = await pool.query(
+        "UPDATE appointments SET status = 'COMPLETED' WHERE id = $1 RETURNING *",
+        [numAppointmentId]
+      );
+      console.log(`Update result: ${rows.length} rows affected`);
+      if (!rows.length) {
+        console.error(`No rows affected when completing appointment ${appointmentId}`);
+        throw new Error("Appointment not found or could not be completed");
+      }
+      return this.convertAppointment(rows[0]);
+    } catch (error) {
+      console.error(`Error in completeAppointment for ID ${appointmentId}:`, error);
+      throw error; // Re-throw the error for the route to handle
+    }
   }
 
   async getAppointment(appointmentId: number): Promise<Appointment | null> {
-    const { rows } = await pool.query(
-      "SELECT * FROM appointments WHERE id = $1",
-      [appointmentId]
-    );
-    return rows[0] || null;
+    console.log(`Storage: Getting appointment ${appointmentId}`);
+    try {
+      // Ensure appointmentId is treated as a number
+      const numAppointmentId = typeof appointmentId === 'string' 
+        ? parseInt(appointmentId) 
+        : appointmentId;
+        
+      const { rows } = await pool.query(
+        "SELECT * FROM appointments WHERE id = $1",
+        [numAppointmentId]
+      );
+      console.log(`Query result: ${rows.length} rows found`);
+      if (rows.length === 0) {
+        console.log(`Appointment ${appointmentId} not found in database`);
+        return null;
+      }
+      return this.convertAppointment(rows[0]);
+    } catch (error) {
+      console.error(`Error in getAppointment for ID ${appointmentId}:`, error);
+      throw error; // Re-throw the error for the route to handle
+    }
   }
 
   async getService(serviceId: number): Promise<Service | null> {
