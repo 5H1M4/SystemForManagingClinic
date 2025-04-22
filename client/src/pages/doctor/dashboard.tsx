@@ -32,6 +32,9 @@ export default function DoctorDashboard() {
       console.log(`Appointment ${appointmentId} completed successfully`);
       // Invalidate the specific query key for this doctor's appointments
       queryClient.invalidateQueries({ queryKey: [`/api/doctors/${user?.id}/appointments`] });
+      // Also invalidate the revenue queries to update clinic admin and super admin dashboards
+      queryClient.invalidateQueries({ queryKey: ["revenue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/revenue/total"] });
       toast({
         title: "Appointment Completed",
         description: "The appointment has been marked as completed.",

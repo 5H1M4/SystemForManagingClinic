@@ -110,20 +110,22 @@ interface Service {
 }
 
 interface Revenue {
-  dailyRevenue: Array<{
+  dailyRevenue?: Array<{
     date: string;
     amount: number;
   }>;
-  weekly: Array<{
+  weekly?: Array<{
     date: string;
     amount: number;
   }>;
-  monthly: number;
-  serviceRevenue: Array<{
+  monthly?: number;
+  serviceRevenue?: Array<{
     serviceId: number;
     count: number;
     revenue: number;
   }>;
+  totalRevenue?: number;
+  currency?: string;
 }
 // Utility functions
 const formatCurrency = (amount: number | null | undefined): string => {
@@ -456,6 +458,17 @@ export default function SchedulingAndRevenue() {
       console.warn('appointments is not an array:', appointments);
     }
   }, [appointments, selectedDate]);
+
+  // Add debugging for revenue data
+  useEffect(() => {
+    console.log('Revenue data:', revenue);
+    if (revenue?.totalRevenue !== undefined) {
+      console.log('Using new API format with totalRevenue:', revenue.totalRevenue);
+    } else if (revenue?.dailyRevenue) {
+      console.log('Using old API format with dailyRevenue');
+    }
+  }, [revenue]);
+  
   // Modify this for safer checking
   const hasAppointmentsForSelectedDate = Array.isArray(appointments) && appointments.length > 0;
   // Create a new appointment
@@ -709,6 +722,11 @@ export default function SchedulingAndRevenue() {
 
   // Calculate daily revenue
   const calculateDailyRevenue = () => {
+    // First check if we have the new API format with totalRevenue
+    if (revenue?.totalRevenue !== undefined) {
+      return formatCurrency(revenue.totalRevenue);
+    }
+    // Fall back to old format
     if (!revenue || !revenue.dailyRevenue) return formatCurrency(0);
     const todayRevenue = revenue.dailyRevenue.find((day: any) => 
       isSameDay(parseISO(day.date), selectedDate)
@@ -718,19 +736,29 @@ export default function SchedulingAndRevenue() {
 
   // Calculate weekly revenue
   const calculateWeeklyRevenue = () => {
+    // First check if we have the new API format with totalRevenue
+    if (revenue?.totalRevenue !== undefined) {
+      return formatCurrency(revenue.totalRevenue);
+    }
+    // Fall back to old format
     if (!revenue || !revenue.weekly) return formatCurrency(0);
     return formatCurrency(revenue.weekly.reduce((total: number, day: any) => total + day.amount, 0));
   };
 
   // Calculate monthly revenue
   const calculateMonthlyRevenue = () => {
+    // First check if we have the new API format with totalRevenue
+    if (revenue?.totalRevenue !== undefined) {
+      return formatCurrency(revenue.totalRevenue);
+    }
+    // Fall back to old format
     if (!revenue || !revenue.monthly) return formatCurrency(0);
     return formatCurrency(revenue.monthly);
   };
 
   // Fix the refresh functionality
   const handleRefresh = () => {
-    console.log('Manually refreshing appointments...');
+    console.log('Manually refreshing data...');
     const dateString = selectedDate.toISOString().split('T')[0];
     console.log(`Invalidating query for date: ${dateString}`);
     
@@ -739,8 +767,14 @@ export default function SchedulingAndRevenue() {
       queryKey: ['appointments', dateString] 
     });
     
+    // Also invalidate revenue queries
+    queryClient.invalidateQueries({
+      queryKey: ['revenue']
+    });
+    
     // Then refetch
     refetchAppointments();
+    refetchRevenue();
   };
 
   // Sorting function
@@ -867,68 +901,92 @@ export default function SchedulingAndRevenue() {
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Daily Revenue</CardTitle>
-                  <CardDescription>
-                    {format(selectedDate, 'MMMM d, yyyy')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{calculateDailyRevenue()}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Weekly Revenue</CardTitle>
-                  <CardDescription>Last 7 days</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{calculateWeeklyRevenue()}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Monthly Revenue</CardTitle>
-                  <CardDescription>Current month</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">{calculateMonthlyRevenue()}</div>
-                </CardContent>
-              </Card>
+            <>
+              <div className="flex justify-end mb-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => refetchRevenue()}
+                  className="flex items-center gap-1"
+                >
+                  <RefreshCw className="h-3 w-3" /> Refresh Revenue
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Daily Revenue</CardTitle>
+                    <CardDescription>
+                      {format(selectedDate, 'MMMM d, yyyy')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{calculateDailyRevenue()}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Weekly Revenue</CardTitle>
+                    <CardDescription>Last 7 days</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{calculateWeeklyRevenue()}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Monthly Revenue</CardTitle>
+                    <CardDescription>Current month</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">{calculateMonthlyRevenue()}</div>
+                  </CardContent>
+                </Card>
 
-              <Card className="md:col-span-3">
-                <CardHeader>
-                  <CardTitle>Revenue Breakdown</CardTitle>
-                  <CardDescription>Revenue by service type</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {revenue && revenue.serviceRevenue ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Service</TableHead>
-                          <TableHead>Appointments</TableHead>
-                          <TableHead className="text-right">Revenue</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {revenue.serviceRevenue.map((item: any) => (
-                          <TableRow key={item.serviceId}>
-                            <TableCell>{getServiceName(item.serviceId)}</TableCell>
-                            <TableCell>{item.count}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
+                <Card className="col-span-3">
+                  <CardHeader>
+                    <CardTitle>Revenue Breakdown</CardTitle>
+                    <CardDescription>Revenue by service type</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Check if we have the old format with serviceRevenue data */}
+                    {revenue && revenue.serviceRevenue ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Service</TableHead>
+                            <TableHead>Count</TableHead>
+                            <TableHead className="text-right">Revenue</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p className="text-center text-muted-foreground py-4">No revenue data available</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                        </TableHeader>
+                        <TableBody>
+                          {revenue.serviceRevenue.map((item: any) => (
+                            <TableRow key={item.serviceId}>
+                              <TableCell>{getServiceName(item.serviceId)}</TableCell>
+                              <TableCell>{item.count}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(item.revenue)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="text-center p-4 space-y-2">
+                        <p className="text-center text-muted-foreground py-4">
+                          {revenue?.totalRevenue !== undefined && revenue.totalRevenue > 0 
+                            ? `Total revenue: ${formatCurrency(revenue.totalRevenue)}` 
+                            : "No revenue data available"}
+                        </p>
+                        {revenue?.totalRevenue !== undefined && revenue.totalRevenue > 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            Detailed breakdown by service type is not available in this view.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
           )}
         </TabsContent>
       </Tabs>

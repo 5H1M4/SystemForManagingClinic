@@ -56,6 +56,10 @@ export interface IStorage {
   checkDuplicateAppointment(params: { doctorId: number; startTime: Date; endTime: Date }): Promise<boolean>;
 
   listAppointmentsByClinicAndDate(clinicId: number, date: Date): Promise<Appointment[]>;
+
+  calculateRevenue(clinicId: number): Promise<any>;
+
+  calculateTotalRevenue(): Promise<any>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -742,8 +746,45 @@ export class PostgresStorage implements IStorage {
   }
 
   async calculateRevenue(clinicId: number): Promise<any> {
-    // Implement your revenue calculation logic here
-    // This should return data matching the Revenue interface defined above
+    try {
+      const query = `
+        SELECT SUM(s.price::numeric) as total_revenue
+        FROM appointments a
+        JOIN services s ON a.service_id = s.id
+        WHERE a.clinic_id = $1 AND a.status = 'COMPLETED'
+      `;
+      
+      const { rows } = await pool.query(query, [clinicId]);
+      
+      return {
+        totalRevenue: Number(rows[0]?.total_revenue || 0),
+        currency: 'USD'
+      };
+    } catch (error) {
+      console.error("Error calculating revenue:", error);
+      throw new Error("Failed to calculate revenue");
+    }
+  }
+
+  async calculateTotalRevenue(): Promise<any> {
+    try {
+      const query = `
+        SELECT SUM(s.price::numeric) as total_revenue
+        FROM appointments a
+        JOIN services s ON a.service_id = s.id
+        WHERE a.status = 'COMPLETED'
+      `;
+      
+      const { rows } = await pool.query(query);
+      
+      return {
+        totalRevenue: Number(rows[0]?.total_revenue || 0),
+        currency: 'USD'
+      };
+    } catch (error) {
+      console.error("Error calculating total revenue:", error);
+      throw new Error("Failed to calculate total revenue");
+    }
   }
 
   async updateAppointment(
@@ -796,15 +837,33 @@ export class PostgresStorage implements IStorage {
         ? parseInt(appointmentId) 
         : appointmentId;
         
+      // First, get the appointment to retrieve service information
+      const appointment = await this.getAppointment(numAppointmentId);
+      if (!appointment) {
+        throw new Error("Appointment not found");
+      }
+      
+      // Get service details to log price information
+      const service = await this.getService(Number(appointment.serviceId));
+      if (!service) {
+        throw new Error("Service not found for this appointment");
+      }
+      
+      // Update the appointment status to completed
       const { rows } = await pool.query(
         "UPDATE appointments SET status = 'COMPLETED' WHERE id = $1 RETURNING *",
         [numAppointmentId]
       );
+      
       console.log(`Update result: ${rows.length} rows affected`);
       if (!rows.length) {
         console.error(`No rows affected when completing appointment ${appointmentId}`);
         throw new Error("Appointment not found or could not be completed");
       }
+      
+      const servicePrice = Number(service.price);
+      console.log(`Completed appointment ${appointmentId} with service price ${servicePrice} added to clinic revenue`);
+      
       return this.convertAppointment(rows[0]);
     } catch (error) {
       console.error(`Error in completeAppointment for ID ${appointmentId}:`, error);

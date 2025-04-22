@@ -789,6 +789,21 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
     }
   });
 
+  // New endpoint for super admin to get total revenue across all clinics
+  app.get('/api/revenue/total', async (req, res) => {
+    if (!req.isAuthenticated() || req.user.role !== "SUPER_ADMIN") {
+      return res.sendStatus(403);
+    }
+    
+    try {
+      const totalRevenue = await storage.calculateTotalRevenue();
+      res.json(totalRevenue);
+    } catch (error) {
+      console.error('Error fetching total revenue:', error);
+      res.status(500).json({ error: "Failed to calculate total revenue" });
+    }
+  });
+
   // Add these routes for appointment management
   app.put('/api/appointments/:appointmentId', async (req, res) => {
     if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {

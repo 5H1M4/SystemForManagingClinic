@@ -19,6 +19,20 @@ interface Clinic {
   email: string;
 }
 
+interface Revenue {
+  totalRevenue: number;
+  currency: string;
+}
+
+// Helper function to format currency
+const formatCurrency = (amount: number | null | undefined): string => {
+  if (amount === null || amount === undefined) return '$0.00';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+};
+
 export default function SuperAdminDashboard() {
   const fetchClinics = async () => {
     const response = await fetch("/api/clinics");
@@ -28,9 +42,22 @@ export default function SuperAdminDashboard() {
     return response.json();
   };
 
-  const { data: clinics, isLoading } = useQuery({
+  const fetchTotalRevenue = async () => {
+    const response = await fetch("/api/revenue/total");
+    if (!response.ok) {
+      throw new Error("Failed to fetch total revenue");
+    }
+    return response.json();
+  };
+
+  const { data: clinics, isLoading: isLoadingClinics } = useQuery({
     queryKey: ["/api/clinics"],
     queryFn: fetchClinics,
+  });
+
+  const { data: revenue, isLoading: isLoadingRevenue } = useQuery<Revenue>({
+    queryKey: ["/api/revenue/total"],
+    queryFn: fetchTotalRevenue,
   });
 
   const { logoutMutation } = useAuth();
@@ -77,6 +104,8 @@ export default function SuperAdminDashboard() {
     setSelectedClinic(clinic);
     setViewModalOpen(true);
   };
+
+  const isLoading = isLoadingClinics || isLoadingRevenue;
 
   if (isLoading) {
     return (
@@ -128,7 +157,7 @@ export default function SuperAdminDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$0.00</div>
+            <div className="text-2xl font-bold">{formatCurrency(revenue?.totalRevenue)}</div>
           </CardContent>
         </Card>
       </div>
