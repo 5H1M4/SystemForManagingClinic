@@ -33,4 +33,9 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
   },
+  define: {
+    // Provide polyfills for process and process.env
+    'process.env': {},
+    'process': {}
+  }
 });

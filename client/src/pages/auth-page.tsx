@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function AuthPage() {
   const [, setLocation] = useLocation();
-  const [search] = useSearch();
+  const search = useSearch();
   const { user, loginMutation, registerMutation } = useAuth();
   const { toast } = useToast();
 

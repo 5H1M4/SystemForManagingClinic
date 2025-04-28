@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Calendar, Clock, User, Heart } from "lucide-react";
+import { Calendar, Clock, User, Heart, CheckCircle, ShieldCheck } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -15,9 +15,14 @@ export default function LandingPage() {
       <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
           <h2 className="text-lg font-semibold">ClinicFlow</h2>
-          <Link href="/auth">
-            <Button variant="secondary">Sign In</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/auth">
+              <Button variant="ghost">Log In</Button>
+            </Link>
+            <Link href="/auth?action=register">
+              <Button variant="secondary">Sign Up</Button>
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -86,46 +91,61 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* About Section */}
-        <section className="py-20">
+        {/* About Section - Refined */}
+        <section className="py-20 bg-background">
           <div className="container">
             <div className="grid lg:grid-cols-2 gap-12 items-center">
-              <div>
-                <h2 className="text-3xl font-bold mb-6">
-                  Your Health, Our Priority
-                </h2>
-                <div className="space-y-4 text-muted-foreground">
-                  <p>
-                    At ClinicFlow, we understand that your time is valuable. Our modern healthcare management system is designed to make your medical appointments and follow-ups as seamless as possible.
-                  </p>
-                  <p>
-                    With features like online booking, appointment reminders, and secure medical records, we ensure that you receive the best possible care without the usual hassles of traditional clinic visits.
-                  </p>
-                </div>
-              </div>
+              <Card className="bg-card/80 shadow-md p-8 flex flex-col justify-center">
+                <CardHeader className="p-0 mb-6">
+                  <CardTitle className="text-3xl font-bold mb-2">
+                    Your Health, <span className="text-blue-500">Our Priority</span>
+                  </CardTitle>
+                  <CardDescription className="text-base text-muted-foreground mb-4">
+                    At ClinicFlow, we value your time and well-being. Our modern healthcare management system makes appointments and follow-ups seamless, so you can focus on what matters most—your health.
+                  </CardDescription>
+                </CardHeader>
+                <ul className="space-y-3 mt-2">
+                  <li className="flex items-center gap-3 text-muted-foreground">
+                    <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-100 text-blue-600"><CheckCircle className="h-4 w-4" /></span>
+                    <span className="font-medium">Online Appointment Booking</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-muted-foreground">
+                    <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-100 text-blue-600"><CheckCircle className="h-4 w-4" /></span>
+                    <span className="font-medium">Automated Reminders</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-muted-foreground">
+                    <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-100 text-blue-600"><CheckCircle className="h-4 w-4" /></span>
+                    <span className="font-medium">Secure Medical Records</span>
+                  </li>
+                  <li className="flex items-center gap-3 text-muted-foreground">
+                    <span className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-blue-100 text-blue-600"><CheckCircle className="h-4 w-4" /></span>
+                    <span className="font-medium">Privacy & Data Protection</span>
+                  </li>
+                </ul>
+              </Card>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-4">
                   <img 
                     src="https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80"
                     alt="Modern Clinic Reception"
-                    className="h-32 w-full object-cover rounded-lg"
+                    className="h-40 w-full object-cover rounded-lg shadow-sm border border-border"
                   />
                   <img 
                     src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80"
                     alt="Treatment Room"
-                    className="h-64 w-full object-cover rounded-lg"
+                    className="h-64 w-full object-cover rounded-lg shadow-sm border border-border"
                   />
                 </div>
                 <div className="space-y-4 pt-8">
                   <img 
-                    src="https://images.unsplash.com/photo-1631217868264-e5b90bb4fbd3?auto=format&fit=crop&q=80"
-                    alt="Medical Equipment"
-                    className="h-64 w-full object-cover rounded-lg"
+                    src="https://images.unsplash.com/photo-1587854680352-936b22b91030?auto=format&fit=crop&q=80"
+                    alt="Medical Technology"
+                    className="h-64 w-full object-cover rounded-lg shadow-sm border border-border"
                   />
                   <img 
                     src="https://images.unsplash.com/photo-1666214280557-f1b5022eb634?auto=format&fit=crop&q=80"
                     alt="Consultation Room"
-                    className="h-32 w-full object-cover rounded-lg"
+                    className="h-40 w-full object-cover rounded-lg shadow-sm border border-border"
                   />
                 </div>
               </div>
@@ -205,10 +225,10 @@ export default function LandingPage() {
                 <h3 className="font-semibold mb-4">Quick Links</h3>
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   <li>
-                    <Link href="/auth">Book Appointment</Link>
+                    <Link href="/auth?action=register">Book Appointment</Link>
                   </li>
                   <li>
-                    <Link href="/auth">Patient Portal</Link>
+                    <Link href="/auth">Patient Login</Link>
                   </li>
                   <li>
                     <button onClick={() => window.location.href = "/auth/staff"} className="text-muted-foreground hover:text-primary">

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="180" height="40" viewBox="0 0 180 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Medical cross symbol -->
+  <rect x="5" y="5" width="30" height="30" rx="4" fill="#3b82f6"/>
+  <path d="M20 10V30" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  <path d="M10 20H30" stroke="white" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Text -->
+  <text x="45" y="25" font-family="Arial, sans-serif" font-weight="700" font-size="20" fill="#2d3748">MediSync</text>
+</svg> 
