@@ -39,6 +39,7 @@ export interface IStorage {
   createAppointment(insertAppointment: InsertAppointment): Promise<Appointment>;
   listAppointmentsByClinic(clinicId: number): Promise<Appointment[]>;
   listAppointmentsByDoctor(doctorId: number): Promise<Appointment[]>;
+  listAppointmentsByClient(clientId: number): Promise<Appointment[]>;
   
   // Payment operations
   createPayment(insertPayment: InsertPayment): Promise<Payment>;
@@ -962,6 +963,19 @@ export class PostgresStorage implements IStorage {
     } catch (error) {
       console.error("Error listing appointments by date:", error);
       throw new Error("Failed to list appointments by date");
+    }
+  }
+
+  async listAppointmentsByClient(clientId: number): Promise<Appointment[]> {
+    try {
+      const { rows } = await pool.query(
+        "SELECT * FROM appointments WHERE client_id = $1 ORDER BY start_time DESC",
+        [clientId]
+      );
+      return rows.map(row => this.convertAppointment(row));
+    } catch (error) {
+      console.error("Error listing appointments by client:", error);
+      throw new Error("Failed to list appointments by client");
     }
   }
 }

@@ -877,6 +877,44 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
     res.json(availableSlots);
   });
 
+  app.get("/api/clients/:clientId/appointments", async (req, res) => {
+    console.log("=== Fetching Client Appointments ===");
+    console.log("Client ID:", req.params.clientId);
+    console.log("User:", req.user);
+    
+    if (!req.isAuthenticated()) {
+      return res.sendStatus(401);
+    }
+
+    // Only allow clients to view their own appointments or clinic admins/doctors to view any client's appointments
+    if (req.user.role === "CLIENT" && req.user.id !== Number(req.params.clientId)) {
+      return res.sendStatus(403);
+    }
+
+    try {
+      // Get appointments
+      const appointments = await storage.listAppointmentsByClient(Number(req.params.clientId));
+      
+      // Get service details for each appointment
+      const appointmentsWithDetails = await Promise.all(
+        appointments.map(async (appointment) => {
+          const service = await storage.getService(appointment.serviceId);
+          return {
+            ...appointment,
+            serviceName: service?.name || "Unknown Service",
+            servicePrice: service?.price || 0
+          };
+        })
+      );
+
+      console.log("Fetched appointments:", JSON.stringify(appointmentsWithDetails, null, 2));
+      res.json(appointmentsWithDetails);
+    } catch (error) {
+      console.error("Error fetching client appointments:", error);
+      res.status(500).json({ error: "Failed to fetch appointments" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

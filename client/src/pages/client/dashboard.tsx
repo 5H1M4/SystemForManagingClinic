@@ -57,9 +57,14 @@ export default function ClientDashboard() {
     enabled: !!user?.id,
     queryFn: async () => {
       if (!user?.id) return [];
+      console.log('Fetching appointments for user:', user.id);
       const res = await fetch(`/api/clients/${user.id}/appointments`);
-      if (!res.ok) return [];
+      if (!res.ok) {
+        console.error('Failed to fetch appointments:', await res.text());
+        return [];
+      }
       const data = await res.json();
+      console.log('Fetched appointments:', data);
       return Array.isArray(data) ? data : [];
     },
   });
@@ -111,6 +116,9 @@ export default function ClientDashboard() {
       startTime: selectedDate.toISOString(),
       clientId: user?.id,
       status: "SCHEDULED",
+      clientName: `${user?.firstName} ${user?.lastName}`,
+      clientEmail: user?.email,
+      clientPhone: user?.phone,
     });
   };
 
@@ -122,13 +130,13 @@ export default function ClientDashboard() {
     );
   }
 
-  const upcomingAppointments = appointments && appointments.filter(
+  const upcomingAppointments = appointments.filter(
     (apt: any) => new Date(apt.startTime) > new Date()
-  );
+  ).sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
-  const pastAppointments = appointments && appointments.filter(
+  const pastAppointments = appointments.filter(
     (apt: any) => new Date(apt.startTime) <= new Date()
-  );
+  ).sort((a: any, b: any) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
 
   return (
     <DashboardLayout>
@@ -213,23 +221,25 @@ export default function ClientDashboard() {
                     </PopoverContent>
                   </Popover>
                 </div>
-                <Button
-                  onClick={handleBookAppointment}
-                  disabled={
-                    !selectedClinic ||
-                    !selectedService ||
-                    !selectedDate ||
-                    bookAppointmentMutation.isPending
-                  }
-                  className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
-                >
-                  {bookAppointmentMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                  )}
-                  Book Appointment
-                </Button>
+                <div className="flex justify-end space-x-2">
+                  <Button variant="outline" onClick={() => setModalOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleBookAppointment}
+                    disabled={!selectedClinic || !selectedService || !selectedDate}
+                    className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                  >
+                    {bookAppointmentMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Booking...
+                      </>
+                    ) : (
+                      "Book Appointment"
+                    )}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -237,88 +247,65 @@ export default function ClientDashboard() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Upcoming Appointments
-              </CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Upcoming Appointments</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {upcomingAppointments.length > 0 ? (
-                  upcomingAppointments.map((appointment: any) => (
-                    <div
-                      key={appointment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {format(new Date(appointment.startTime), "PPP")}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(new Date(appointment.startTime), "h:mm a")}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {appointment.serviceName} - ${appointment.servicePrice}
-                        </p>
+              {upcomingAppointments.length > 0 ? (
+                <div className="space-y-4">
+                  {upcomingAppointments.map((apt: any) => (
+                    <div key={apt.id} className="flex items-center space-x-4 p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium">{format(new Date(apt.startTime), "PPP")}</p>
+                        <p className="text-sm text-gray-500">{format(new Date(apt.startTime), "p")}</p>
+                        <p className="text-sm text-gray-500">Service: {apt.serviceName}</p>
                       </div>
-                      <Link href={`/appointments/${appointment.id}`}>
-                        <Button variant="outline">View Details</Button>
-                      </Link>
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <Clock className="h-4 w-4 text-gray-500" />
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">No upcoming appointments</p>
-                    <Button variant="outline" className="mt-4" onClick={() => setModalOpen(true)}>
-                      Book Your First Appointment
-                    </Button>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-gray-500">No upcoming appointments</p>
+                  <Button
+                    onClick={() => setModalOpen(true)}
+                    variant="link"
+                    className="mt-2"
+                  >
+                    Book your first appointment
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Past Appointments
-              </CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardHeader>
+              <CardTitle>Past Appointments</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {pastAppointments.length > 0 ? (
-                  pastAppointments.map((appointment: any) => (
-                    <div
-                      key={appointment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {format(new Date(appointment.startTime), "PPP")}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {appointment.serviceName} - ${appointment.servicePrice}
-                        </p>
+              {pastAppointments.length > 0 ? (
+                <div className="space-y-4">
+                  {pastAppointments.map((apt: any) => (
+                    <div key={apt.id} className="flex items-center space-x-4 p-4 border rounded-lg bg-black/10 dark:border-gray-800">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-100">{format(new Date(apt.startTime), "MMMM do, yyyy")}</p>
+                        <p className="text-sm text-gray-500">{format(new Date(apt.startTime), "h:mm a")}</p>
+                        <p className="text-sm text-gray-500">Service: {apt.serviceName || "Specialist Consultation"}</p>
                       </div>
-                      <div
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          appointment.status === "COMPLETED"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-blue-100 text-blue-800"
-                        }`}
-                      >
-                        {appointment.status}
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <Clock className="h-4 w-4 text-gray-500" />
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-center text-muted-foreground py-8">
-                    No past appointments
-                  </p>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center py-4 text-gray-500">No past appointments</p>
+              )}
             </CardContent>
           </Card>
         </div>
