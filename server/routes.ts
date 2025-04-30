@@ -154,8 +154,7 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
     console.log("=== Starting Appointment Creation ===");
     console.log("Request body:", JSON.stringify(req.body, null, 2));
     console.log("User:", JSON.stringify(req.user, null, 2));
-  
-    if (!req.isAuthenticated() || (req.user.role !== "DOCTOR" && req.user.role !== "CLINIC_ADMIN")) {
+    if (!req.isAuthenticated() || !["DOCTOR", "CLINIC_ADMIN", "CLIENT"].includes(req.user.role)) {
       console.log("Authentication failed - User role:", req.user?.role);
       return res.sendStatus(403);
     }
@@ -175,31 +174,43 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
         return res.status(400).json({ error: "Invalid service selected" });
       }
   
+      // If doctorId is not provided (client booking), assign the first doctor from the clinic
+      let doctorId = Number(req.body.doctorId);
+      if ((!doctorId || isNaN(doctorId)) && req.user.role === "CLIENT") {
+        const doctors = await storage.listDoctorsByClinic(Number(req.body.clinicId));
+        if (!doctors || doctors.length === 0) {
+          return res.status(400).json({ error: "No doctors available for this clinic" });
+        }
+        doctorId = doctors[0].id;
+      }
+  
       // Calculate end time
       const endTime = new Date(startTime.getTime() + service.duration * 60000);
   
       // Check for duplicate appointments with validated dates
-      const existingAppointment = await storage.checkDuplicateAppointment({
-        doctorId: Number(req.body.doctorId),
-        startTime,
-        endTime
-      });
-  
-      if (existingAppointment) {
-        return res.status(400).json({ 
-          error: "Doctor already has an appointment scheduled for this time slot" 
+      let existingAppointment = false;
+      if (!isNaN(doctorId) && doctorId > 0) {
+        existingAppointment = await storage.checkDuplicateAppointment({
+          doctorId: doctorId,
+          startTime,
+          endTime
         });
+        if (existingAppointment) {
+          return res.status(400).json({ 
+            error: "Doctor already has an appointment scheduled for this time slot" 
+          });
+        }
       }
   
       // Build appointment data
       const appointmentData = {
         clientId: req.body.clientId || 1,
-        doctorId: Number(req.body.doctorId),
+        doctorId: doctorId,
         serviceId: Number(req.body.serviceId),
         startTime,
         endTime,
         notes: req.body.notes || "",
-        clinicId: req.user.clinicId,
+        clinicId: req.user.role === "CLIENT" ? Number(req.body.clinicId) : req.user.clinicId,
         clientName: req.body.clientName,
         clientEmail: req.body.clientEmail,
         clientPhone: req.body.clientPhone,
@@ -824,6 +835,46 @@ app.get("/api/clinics/:clinicId/services", async (req, res) => {
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
+  });
+
+  // Add this endpoint for available slots for a service on a given date
+  app.get('/api/services/:serviceId/slots', async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    const serviceId = Number(req.params.serviceId);
+    const date = req.query.date as string;
+    if (!serviceId || !date) return res.status(400).json({ error: 'Missing serviceId or date' });
+
+    // Get the service to determine duration and clinic
+    const service = await storage.getService(serviceId);
+    if (!service) return res.status(404).json({ error: 'Service not found' });
+    const clinicId = service.clinicId;
+    const duration = Number(service.duration) || 30;
+    const startHour = 9, endHour = 17;
+    const slots: string[] = [];
+    const dateObj = new Date(date);
+    dateObj.setHours(0, 0, 0, 0);
+
+    // Generate all possible slots for the day
+    for (let hour = startHour; hour < endHour; hour++) {
+      for (let min = 0; min < 60; min += duration) {
+        const slot = new Date(dateObj);
+        slot.setHours(hour, min, 0, 0);
+        slots.push(slot.toTimeString().slice(0, 5)); // "HH:MM"
+      }
+    }
+
+    // Get all appointments for this clinic/service/date
+    const appointments = await storage.listAppointmentsByClinicAndDate(clinicId, dateObj);
+    const bookedTimes = appointments
+      .filter(a => a.serviceId === serviceId)
+      .map(a => {
+        const d = new Date(a.startTime);
+        return d.toTimeString().slice(0, 5);
+      });
+
+    // Filter out booked slots
+    const availableSlots = slots.filter(slot => !bookedTimes.includes(slot));
+    res.json(availableSlots);
   });
 
   const httpServer = createServer(app);
